@@ -12,7 +12,7 @@ def aggregate_nutrition(nutrition_results):
         total_calories += nutrition.get("calories", 0)
         total_protein += nutrition.get("protein", 0)
         total_fat += nutrition.get("fat", 0)
-        total_carbs += nutrition.get("carbs", 0)
+        total_carbs += nutrition.get("carbohydrate", 0)
         total_sugar += nutrition.get("sugar", 0)
         total_fiber += nutrition.get("fiber", 0)
 
