@@ -1,11 +1,9 @@
 import requests
-
-from vision_service.config import (
-    VISION_INFERENCE_ENDPOINT,
-)
+from vision_service.config import VISION_INFERENCE_ENDPOINT
+from vision_service.detection.detector import BaseDetector
 
 
-class GroundingDINODetector:
+class GroundingDINODetector(BaseDetector):
 
     def __init__(self):
         self.endpoint = f"{VISION_INFERENCE_ENDPOINT}/detect"
