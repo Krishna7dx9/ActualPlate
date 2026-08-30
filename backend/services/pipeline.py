@@ -30,6 +30,10 @@ async def process_image(file: UploadFile):
 
         nutrition_results = []
         failed = 0
+
+        assert len(food_list) == len(portions), \
+            f"Food/portion count mismatch: {len(food_list)} foods, {len(portions)} portions"
+
         for food, portion in zip(food_list, portions):
             data = search_food(food)
             if "error" in data:
