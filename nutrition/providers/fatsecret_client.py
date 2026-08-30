@@ -152,7 +152,7 @@ def normalize_food_response(food_data):
     for serving in servings:
 
         if (
-            serving.get("metric_serving_unit") == "g"
+            serving.get("metric_serving_unit") in ("g", "gm")
             and float(serving.get("metric_serving_amount", 0)) == 100
         ):
             reference = serving
