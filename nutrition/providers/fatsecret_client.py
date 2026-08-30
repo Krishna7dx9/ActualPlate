@@ -92,7 +92,22 @@ def get_food_details(food_id):
         timeout=10
     )
 
-    if response.status_code != 200:
+    if response.status_code == 401:
+        return {
+            "error": "FatSecret authentication failed",
+            "details": "OAuth token expired or invalid credentials"
+        }
+    elif response.status_code == 429:
+        return {
+            "error": "FatSecret rate limit exceeded",
+            "details": "Too many requests — slow down or upgrade plan"
+        }
+    elif response.status_code >= 500:
+        return {
+            "error": "FatSecret server error",
+            "details": response.text
+        }
+    elif response.status_code != 200:
         return {
             "error": "Unable to fetch food details",
             "details": response.text
