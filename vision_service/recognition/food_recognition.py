@@ -19,6 +19,7 @@ def detect_food(image_bytes):
 
     response = client.chat.completions.create(
         model="google/gemma-3-27b-it",
+        max_tokens=400,
         messages=[
             {
                 "role": "user",
