@@ -1,4 +1,7 @@
+import os
+
 import requests
+
 from vision_service.config import VISION_INFERENCE_ENDPOINT
 from vision_service.detection.detector import BaseDetector
 
@@ -20,7 +23,11 @@ class GroundingDINODetector(BaseDetector):
             response = requests.post(
                 self.endpoint,
                 files={
-                    "file": image
+                    "file": (
+                        os.path.basename(image_path),
+                        image,
+                        "image/jpeg",
+                    )
                 },
                 data={
                     "labels": ",".join(labels)
