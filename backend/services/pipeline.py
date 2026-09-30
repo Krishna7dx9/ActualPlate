@@ -84,8 +84,8 @@ async def process_image(file: UploadFile):
         for food_item in foods_data:
             food_name = food_item["label"]
 
-            volume_relative = food_item.get(
-                "volume_relative",
+            volume_cm3 = food_item.get(
+                "volume_cm3",
                 0,
             )
 
@@ -103,7 +103,7 @@ async def process_image(file: UploadFile):
             nutrition_results.append(
                 format_nutrition_response(
                     data,
-                    volume_relative,
+                    volume_cm3,
                 )
             )
 
