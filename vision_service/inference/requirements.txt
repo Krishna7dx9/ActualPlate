@@ -1,0 +1,13 @@
+torch
+transformers
+sam2
+opencv-python
+pillow
+matplotlib
+numpy
+scipy
+fastapi
+uvicorn
+nest-asyncio
+python-multipart
+requests
