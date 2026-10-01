@@ -27,7 +27,10 @@ async def process_image(file: UploadFile):
             image_path = temp.name
 
         # -------------------------------------------------
-        # 1. Recognize food labels
+        # 1. Gemma: food search queries + densities
+        #
+        # detect_food returns a list of dicts:
+        #   [{"search_query": str, "density_g_cm3": float}, ...]
         # -------------------------------------------------
 
         detected_foods = detect_food(image)
@@ -37,73 +40,58 @@ async def process_image(file: UploadFile):
                 "error": "Food not detected"
             }
 
-        food_list = [
-            food.strip()
-            for food in detected_foods.split(",")
-            if food.strip()
-        ]
-
         # -------------------------------------------------
-        # 2. Run vision inference
+        # 2. Colab vision inference
         #
-        # Colab owns:
-        # - Grounding DINO
-        # - SAM2
-        # - Depth Anything V2
-        # - Plane fitting
-        # - Volume estimation
-        #
-        # Expected response:
-        # {
-        #     "foods": [
-        #         {
-        #             "label": "rice",
-        #             "score": 0.86,
-        #             "volume_relative": 399959.69
-        #         }
-        #     ]
-        # }
+        # We send search queries as labels. Colab returns
+        # one volume_cm3 per detected food. We match Gemma's
+        # item i to Colab's item i by position, and we verify
+        # the count matches before using any of it.
         # -------------------------------------------------
 
         detections = detector.detect(
             image_path=image_path,
-            labels=food_list,
+            labels=[item["search_query"] for item in detected_foods],
         )
 
-        print(detections)
-
         foods_data = detections.get("foods", [])
+
+        if len(foods_data) != len(detected_foods):
+            return {
+                "error": "Detection count mismatch between Gemma and Colab",
+                "gemma_count": len(detected_foods),
+                "colab_count": len(foods_data),
+            }
+
+        # -------------------------------------------------
+        # 3. Nutrition lookup, per Gemma item
+        # -------------------------------------------------
 
         nutrition_results = []
         failed = 0
 
-        # -------------------------------------------------
-        # 3. Nutrition lookup
-        # -------------------------------------------------
+        for gemma_item, vision_item in zip(detected_foods, foods_data):
 
-        for food_item in foods_data:
-            food_name = food_item["label"]
+            search_query = gemma_item["search_query"]
+            density_g_cm3 = gemma_item["density_g_cm3"]
+            volume_cm3 = vision_item.get("volume_cm3")
 
-            volume_cm3 = food_item.get(
-                "volume_cm3",
-                0,
-            )
+            if volume_cm3 is None:
+                failed += 1
+                continue
 
-            data = search_food(food_name)
+            mass_g = volume_cm3 * density_g_cm3
+
+            data = search_food(search_query)
 
             if "error" in data:
                 failed += 1
                 continue
 
-            # Temporary contract transition.
-            #
-            # volume_relative is NOT grams.
-            # The density -> weight calculation will be
-            # implemented in the next step.
             nutrition_results.append(
                 format_nutrition_response(
                     data,
-                    volume_cm3,
+                    mass_g,
                 )
             )
 
