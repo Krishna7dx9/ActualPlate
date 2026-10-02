@@ -1,10 +1,24 @@
+# ActualPlate inference service dependencies.
+#
+# This file is separate from the backend's requirements.txt on
+# purpose: the backend must not install torch (2 GB CUDA stack
+# for a service that never runs inference), and the inference
+# service must not install the backend's HTTP/nutrition stack.
+#
+# numpy pin: ml-depth-pro (Apple) declares numpy<2 in its own
+# metadata. bootstrap.sh installs it with --no-deps to bypass
+# that pin, and this file pins numpy>=2.1,<3 so that any future
+# plain install of the inference deps cannot downgrade numpy and
+# break Colab's scipy/opencv/jax stack.
+
+numpy>=2.1,<3
+
 torch
 transformers
 sam2
 opencv-python
 pillow
 matplotlib
-numpy
 scipy
 fastapi
 uvicorn
