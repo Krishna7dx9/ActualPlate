@@ -150,9 +150,23 @@ export REPO_DIR
 export TUNNEL
 
 python -c "
-import os, sys
+import os, sys, time
 sys.path.insert(0, os.environ['REPO_DIR'])
 from vision_service.inference.server import launch
+
 tunnel = os.environ.get('TUNNEL', 'false').lower() == 'true'
-launch(tunnel=tunnel)
+public_url = launch(tunnel=tunnel)
+
+if public_url:
+    print()
+    print('Service is running at: %s' % public_url)
+else:
+    print()
+    print('Service is running on port %s.' % os.environ.get('VISION_PORT', '8000'))
+
+print('The cell will stay open until you stop it (Colab stop button or Ctrl+C).')
+sys.stdout.flush()
+
+while True:
+    time.sleep(60)
 "
