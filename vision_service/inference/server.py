@@ -18,11 +18,13 @@ from __future__ import annotations
 
 import os
 import re
+import socket
 import subprocess
 import threading
 import time
 
 import nest_asyncio
+import psutil
 import requests
 import uvicorn
 
@@ -30,11 +32,88 @@ import uvicorn
 HOST = os.environ.get("VISION_HOST", "0.0.0.0")
 PORT = int(os.environ.get("VISION_PORT", "8000"))
 
-CLOUDFLARED_BIN = os.environ.get("CLOUDFLARED_BIN", "cloudflared")
+CLOUDFLARED_URL = (
+    "https://github.com/cloudflare/cloudflared/releases/latest/download/"
+    "cloudflared-linux-amd64"
+)
+
+CLOUDFLARED_CANDIDATES = [
+    os.environ.get("CLOUDFLARED_BIN"),
+    "cloudflared",
+    "/usr/local/bin/cloudflared",
+    "/content/cloudflared-linux-amd64",
+    "./cloudflared-linux-amd64",
+]
+
+
+def _find_or_install_cloudflared() -> str:
+    """
+    Return a path to the cloudflared binary.
+
+    Checks (in order): env override, PATH, common install locations,
+    the current directory. If none exist, downloads the Linux amd64
+    binary to /content/ and returns that path.
+    """
+    for candidate in CLOUDFLARED_CANDIDATES:
+        if not candidate:
+            continue
+        if os.path.isabs(candidate) and os.path.isfile(candidate):
+            return candidate
+        found = shutil_which(candidate)
+        if found:
+            return found
+
+    target = "/content/cloudflared-linux-amd64"
+    if not os.path.isfile(target):
+        subprocess.run(["wget", "-q", CLOUDFLARED_URL, "-O", target], check=True)
+        os.chmod(target, 0o755)
+    return target
+
+
+def shutil_which(name: str) -> str | None:
+    """Minimal which(): return full path if executable is on PATH."""
+    from shutil import which
+    return which(name)
+
+
+def _port_in_use(port: int) -> bool:
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(0.5)
+    try:
+        return s.connect_ex(("127.0.0.1", port)) == 0
+    finally:
+        s.close()
+
+
+def _kill_stale_uvicorn(port: int) -> None:
+    """
+    Kill any uvicorn process listening on the target port.
+
+    Colab keeps a kernel alive across cell re-runs; the previous
+    uvicorn from an earlier launch() call survives and holds the
+    port. Without this, the new uvicorn silently fails to bind and
+    health checks pass against the stale server.
+    """
+    for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+        try:
+            cmdline = " ".join(proc.info["cmdline"] or [])
+            if "uvicorn" in cmdline:
+                proc.kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+    for _ in range(15):
+        if not _port_in_use(port):
+            return
+        time.sleep(1)
+
+    raise RuntimeError(
+        f"Port {port} is still occupied after killing uvicorn processes. "
+        "Restart the runtime and try again."
+    )
 
 
 def _wait_for_local_health(timeout_seconds: int = 30) -> bool:
-    """Poll local /health until it responds 200 or timeout."""
     url = f"http://127.0.0.1:{PORT}/health"
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
@@ -48,13 +127,6 @@ def _wait_for_local_health(timeout_seconds: int = 30) -> bool:
 
 
 def _start_uvicorn_thread() -> threading.Thread:
-    """
-    Start uvicorn in a daemon thread.
-
-    The thread dies when the process exits; no explicit shutdown is
-    required. Nest asyncio patch is applied so this works inside a
-    running event loop (Colab, notebooks).
-    """
     nest_asyncio.apply()
 
     def run() -> None:
@@ -71,14 +143,10 @@ def _start_uvicorn_thread() -> threading.Thread:
 
 
 def _start_cloudflare_tunnel() -> str:
-    """
-    Start cloudflared quick tunnel pointed at the local uvicorn port.
+    binary = _find_or_install_cloudflared()
 
-    Blocks until the tunnel URL is detected in cloudflared's output,
-    then returns it. Raises RuntimeError if no URL is seen within 60s.
-    """
     proc = subprocess.Popen(
-        [CLOUDFLARED_BIN, "tunnel", "--url", f"http://127.0.0.1:{PORT}"],
+        [binary, "tunnel", "--url", f"http://127.0.0.1:{PORT}"],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -102,12 +170,6 @@ def _start_cloudflare_tunnel() -> str:
 
 
 def _verify_tunnel(url: str, attempts: int = 10) -> bool:
-    """
-    Poll the public tunnel URL until /health returns 200.
-
-    Cloudflare quick tunnels announce their URL before DNS propagates,
-    so the first few requests will fail with NameResolutionError.
-    """
     health_url = f"{url}/health"
     for attempt in range(1, attempts + 1):
         try:
@@ -123,9 +185,10 @@ def launch(tunnel: bool = False) -> str | None:
     """
     Start the inference service. Returns the public tunnel URL if
     tunnel=True, else None.
-
-    This is the single entrypoint a host calls to run the service.
     """
+    _kill_stale_uvicorn(PORT)
+    print(f"Port {PORT} free. Starting uvicorn...")
+
     _start_uvicorn_thread()
 
     if not _wait_for_local_health():
