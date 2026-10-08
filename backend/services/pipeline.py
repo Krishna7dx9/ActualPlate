@@ -56,31 +56,67 @@ async def process_image(file: UploadFile):
 
         foods_data = detections.get("foods", [])
 
-        if len(foods_data) != len(detected_foods):
-            return {
-                "error": "Detection count mismatch between Gemma and Colab",
-                "gemma_count": len(detected_foods),
-                "colab_count": len(foods_data),
-            }
+        # -------------------------------------------------
+        # 3. Merge Colab detections by label
+        #
+        # Grounding DINO returns one box per matching region,
+        # so a single Gemma label can produce multiple Colab
+        # detections (duplicates, partials, shadows). We merge
+        # them by label: keep the highest-scoring detection
+        # per label, and sum the volumes of the duplicates so
+        # the merged item reflects the total food present.
+        #
+        # After merging, the count of unique labels will match
+        # Gemma's label count in the normal case, and any
+        # surplus Colab labels are dropped (they have no
+        # corresponding Gemma item and no density).
+        # -------------------------------------------------
+
+        merged: dict[str, dict] = {}
+
+        for vision_item in foods_data:
+            label = vision_item.get("label", "").strip().lower()
+            if not label:
+                continue
+
+            volume = vision_item.get("volume_cm3")
+            score = vision_item.get("score", 0.0)
+
+            if label not in merged:
+                merged[label] = {
+                    "score": score,
+                    "volume_cm3": volume if volume is not None else 0.0,
+                }
+                continue
+
+            # Keep the best score seen for this label.
+            if score > merged[label]["score"]:
+                merged[label]["score"] = score
+
+            # Sum volumes of duplicate detections.
+            if volume is not None:
+                merged[label]["volume_cm3"] += volume
 
         # -------------------------------------------------
-        # 3. Nutrition lookup, per Gemma item
+        # 4. Nutrition lookup, per Gemma item
         # -------------------------------------------------
 
         nutrition_results = []
         failed = 0
 
-        for gemma_item, vision_item in zip(detected_foods, foods_data):
+        for gemma_item in detected_foods:
 
             search_query = gemma_item["search_query"]
             density_g_cm3 = gemma_item["density_g_cm3"]
-            volume_cm3 = vision_item.get("volume_cm3")
 
-            if volume_cm3 is None:
+            label_key = search_query.strip().lower()
+            match = merged.get(label_key)
+
+            if match is None or match["volume_cm3"] <= 0:
                 failed += 1
                 continue
 
-            mass_g = volume_cm3 * density_g_cm3
+            mass_g = match["volume_cm3"] * density_g_cm3
 
             data = search_food(search_query)
 
