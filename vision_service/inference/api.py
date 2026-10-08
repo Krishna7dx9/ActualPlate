@@ -96,6 +96,7 @@ async def detect(
         result = detect_and_measure(
             image_path=image_path,
             labels=food_labels,
+            request_id=request_id,
         )
 
         # Compute volume per detection. The volume engine raises

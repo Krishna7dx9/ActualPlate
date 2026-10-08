@@ -13,12 +13,27 @@ Returns an InferenceResult: a dataclass that separates JSON-safe
 data from the internal arrays required by the volume engine.
 
 No HTTP, no FastAPI, no request handling. That is api.py's job.
+
+Debug visualizations:
+    When SHOW_VISUALIZATIONS=true is set in the environment at the
+    time of the call, this module writes PNG files to
+    VIS_DIR/<request_id>/{boxes,masks,depth}.png.
+
+    Files are used instead of plt.show() because matplotlib figures
+    created inside a background thread (uvicorn runs in a thread)
+    do not render in a notebook cell output channel. Files can be
+    read from any cell, from any thread.
+
+    The env var is read inside the function on every call, not at
+    module import, so toggling it at runtime works without a
+    process restart.
 """
 
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -33,12 +48,20 @@ from vision_service.inference.models import (
 )
 
 
-SHOW_VISUALIZATIONS = (
-    os.environ.get("SHOW_VISUALIZATIONS", "false").lower() == "true"
-)
-
 BOX_THRESHOLD = float(os.environ.get("BOX_THRESHOLD", "0.35"))
 TEXT_THRESHOLD = float(os.environ.get("TEXT_THRESHOLD", "0.25"))
+
+
+def _should_visualize() -> bool:
+    """
+    Read SHOW_VISUALIZATIONS on every call so that a running service
+    can be toggled without a process restart.
+    """
+    return os.environ.get("SHOW_VISUALIZATIONS", "false").lower() == "true"
+
+
+def _vis_dir() -> Path:
+    return Path(os.environ.get("VIS_DIR", "/content/visualizations"))
 
 
 @dataclass
@@ -93,7 +116,23 @@ class InferenceResult:
         }
 
 
-def _visualize_boxes(image_np, boxes, labels, scores) -> None:
+# ---------------------------------------------------------------------------
+# File-based debug visualizations.
+#
+# These write PNGs to disk. They do NOT call plt.show() because that
+# does not render from the uvicorn background thread in a notebook.
+# ---------------------------------------------------------------------------
+
+
+def _save_boxes(
+    image_np: np.ndarray,
+    boxes: np.ndarray,
+    labels: list[str],
+    scores: np.ndarray,
+    out_dir: Path,
+) -> None:
+    import matplotlib
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import matplotlib.patches as patches
 
@@ -121,20 +160,34 @@ def _visualize_boxes(image_np, boxes, labels, scores) -> None:
         )
 
     ax.axis("off")
-    plt.show()
+    fig.savefig(out_dir / "boxes.png", bbox_inches="tight")
+    plt.close(fig)
 
 
-def _visualize_masks(image_np, masks, boxes, labels, scores) -> None:
+def _save_masks(
+    image_np: np.ndarray,
+    masks: list[np.ndarray],
+    boxes: np.ndarray,
+    labels: list[str],
+    scores: np.ndarray,
+    out_dir: Path,
+) -> None:
+    import matplotlib
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import matplotlib.patches as patches
 
-    for mask, box, label, score in zip(masks, boxes, labels, scores):
-        fig, ax = plt.subplots(figsize=(7, 7))
+    count = len(masks)
+    if count == 0:
+        return
+
+    fig, axes = plt.subplots(1, count, figsize=(5 * count, 5))
+    if count == 1:
+        axes = [axes]
+
+    for ax, mask, box, label, score in zip(axes, masks, boxes, labels, scores):
         ax.imshow(image_np)
-        ax.imshow(
-            np.ma.masked_where(~mask, mask),
-            alpha=0.6,
-        )
+        ax.imshow(np.ma.masked_where(~mask, mask), alpha=0.6)
         x1, y1, x2, y2 = box
         ax.add_patch(
             patches.Rectangle(
@@ -148,23 +201,61 @@ def _visualize_masks(image_np, masks, boxes, labels, scores) -> None:
         )
         ax.set_title(f"{label} ({score:.2f})")
         ax.axis("off")
-        plt.show()
+
+    fig.savefig(out_dir / "masks.png", bbox_inches="tight")
+    plt.close(fig)
 
 
-def _visualize_depth(depth_map) -> None:
+def _save_depth(depth_map: np.ndarray, out_dir: Path) -> None:
+    import matplotlib
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    plt.figure(figsize=(8, 8))
-    plt.imshow(depth_map, cmap="inferno")
-    plt.colorbar(label="Depth (meters)")
-    plt.title("Apple Depth Pro")
-    plt.axis("off")
-    plt.show()
+    fig, ax = plt.subplots(figsize=(8, 8))
+    im = ax.imshow(depth_map, cmap="inferno")
+    fig.colorbar(im, ax=ax, label="Depth (meters)")
+    ax.set_title("Apple Depth Pro")
+    ax.axis("off")
+    fig.savefig(out_dir / "depth.png", bbox_inches="tight")
+    plt.close(fig)
+
+
+def _write_visualizations(
+    request_id: str,
+    image_np: np.ndarray,
+    boxes: np.ndarray,
+    detected_labels: list[str],
+    scores: np.ndarray,
+    masks: list[np.ndarray],
+    depth_map: np.ndarray,
+) -> None:
+    """
+    Write boxes.png, masks.png, depth.png to VIS_DIR/<request_id>/.
+
+    Any failure here must not break the inference call. Visualizations
+    are diagnostics, not part of the response contract.
+    """
+    try:
+        out_dir = _vis_dir() / request_id
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        _save_boxes(image_np, boxes, detected_labels, scores, out_dir)
+        _save_masks(image_np, masks, boxes, detected_labels, scores, out_dir)
+        _save_depth(depth_map, out_dir)
+    except Exception as exc:
+        # Never let a visualization failure abort a real inference.
+        print(f"[visualize] failed for {request_id}: {exc}", flush=True)
+
+
+# ---------------------------------------------------------------------------
+# Inference
+# ---------------------------------------------------------------------------
 
 
 def detect_and_measure(
     image_path: str,
     labels: list[str],
+    request_id: str = "no-request-id",
 ) -> InferenceResult:
     """
     Run the full inference pipeline on one image.
@@ -209,9 +300,6 @@ def detect_and_measure(
     scores = detections["scores"].detach().cpu().numpy()
     detected_labels = detections["text_labels"]
 
-    if SHOW_VISUALIZATIONS:
-        _visualize_boxes(image_np, boxes, detected_labels, scores)
-
     # --- SAM2: image + boxes -> masks.
 
     sam2_predictor.set_image(image_np)
@@ -223,9 +311,6 @@ def detect_and_measure(
             multimask_output=False,
         )
         masks.append(np.asarray(mask_result[0], dtype=bool))
-
-    if SHOW_VISUALIZATIONS:
-        _visualize_masks(image_np, masks, boxes, detected_labels, scores)
 
     # --- Depth Pro: image -> metric depth map + focal length.
 
@@ -251,9 +336,6 @@ def detect_and_measure(
             (image_np.shape[1], image_np.shape[0]),
             interpolation=cv2.INTER_LINEAR,
         )
-
-    if SHOW_VISUALIZATIONS:
-        _visualize_depth(depth_map)
 
     # --- Per-food aggregation: depth stats inside each mask.
 
@@ -283,6 +365,19 @@ def detect_and_measure(
                 mask_pixels=int(mask.sum()),
                 depth_m=depth_stats,
             )
+        )
+
+    # --- Optional debug visualizations, written to disk.
+
+    if _should_visualize():
+        _write_visualizations(
+            request_id=request_id,
+            image_np=image_np,
+            boxes=boxes,
+            detected_labels=list(detected_labels),
+            scores=scores,
+            masks=masks,
+            depth_map=depth_map,
         )
 
     return InferenceResult(
