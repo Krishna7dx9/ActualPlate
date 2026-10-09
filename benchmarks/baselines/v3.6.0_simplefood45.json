@@ -1,0 +1,85 @@
+{
+  "dataset": "simplefood45",
+  "endpoint": "http://127.0.0.1:8080/upload-image",
+  "run_at": "2026-10-09T12:28:49.820823+00:00",
+  "total_images": 5,
+  "successes": 5,
+  "failures": 0,
+  "failure_reasons": {},
+  "mass_metrics": {
+    "count": 5,
+    "mape": 6002.45,
+    "median_ape": 5982.97,
+    "signed_bias": 6002.45,
+    "mae": 5882.4
+  },
+  "calorie_metrics": {
+    "count": 5,
+    "mape": 6003.53,
+    "median_ape": 5963.56,
+    "signed_bias": 6003.53,
+    "mae": 15532.32
+  },
+  "results": [
+    {
+      "image": "20230927_102352.jpg",
+      "label": "bagel",
+      "truth_weight": 98.0,
+      "truth_volume": 298.98,
+      "truth_energy": 258.72,
+      "pred_mass_g": 3171.42,
+      "pred_calories": 8434.63,
+      "pred_labels": [
+        "Bake Shop Bagels Plain"
+      ]
+    },
+    {
+      "image": "20230927_102353.jpg",
+      "label": "bagel",
+      "truth_weight": 98.0,
+      "truth_volume": 298.98,
+      "truth_energy": 258.72,
+      "pred_mass_g": 5901.52,
+      "pred_calories": 15530.32,
+      "pred_labels": [
+        "Plain Bagel"
+      ]
+    },
+    {
+      "image": "20230927_102355.jpg",
+      "label": "bagel",
+      "truth_weight": 98.0,
+      "truth_volume": 298.98,
+      "truth_energy": 258.72,
+      "pred_mass_g": 8548.4,
+      "pred_calories": 22495.79,
+      "pred_labels": [
+        "Plain Bagel"
+      ]
+    },
+    {
+      "image": "20230927_102356.jpg",
+      "label": "bagel",
+      "truth_weight": 98.0,
+      "truth_volume": 298.98,
+      "truth_energy": 258.72,
+      "pred_mass_g": 6319.36,
+      "pred_calories": 16806.82,
+      "pred_labels": [
+        "Bake Shop Bagels Plain"
+      ]
+    },
+    {
+      "image": "20230927_102358.jpg",
+      "label": "bagel",
+      "truth_weight": 98.0,
+      "truth_volume": 298.98,
+      "truth_energy": 258.72,
+      "pred_mass_g": 5961.31,
+      "pred_calories": 15687.65,
+      "pred_labels": [
+        "Plain Bagel"
+      ]
+    }
+  ]
+}
