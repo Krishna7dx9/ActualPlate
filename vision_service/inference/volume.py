@@ -281,6 +281,33 @@ def estimate_volume_cm3(
     ray_volume_m3 = np.maximum(ray_volume_m3, 0.0)
 
     volume_m3 = float(np.sum(ray_volume_m3))
+    print("=" * 60, flush=True)
+    print("VOLUME ENGINE INTERMEDIATE", flush=True)
+    print(f"  focal_length_px: {focal_length_px}", flush=True)
+    print(f"  plane_normal: {plane_normal}", flush=True)
+    print(f"  plane_offset: {plane_offset}", flush=True)
+    print(f"  valid_volume pixels: {int(np.count_nonzero(valid_volume))}", flush=True)
+    print(
+        f"  surface_ray_distance min/med/max: "
+        f"{surface_ray_distance.min():.4f} / "
+        f"{float(np.median(surface_ray_distance)):.4f} / "
+        f"{surface_ray_distance.max():.4f}",
+        flush=True,
+    )
+    print(
+        f"  plane_ray_distance min/med/max: "
+        f"{plane_ray_distance.min():.4f} / "
+        f"{float(np.median(plane_ray_distance)):.4f} / "
+        f"{plane_ray_distance.max():.4f}",
+        flush=True,
+    )
+    _height = plane_ray_distance - surface_ray_distance
+    print(
+        f"  height min/med/max: "
+        f"{_height.min():.4f} / {float(np.median(_height)):.4f} / {_height.max():.4f}",
+        flush=True,
+    )
+
     volume_cm3 = volume_m3 * 1_000_000.0
 
     if not np.isfinite(volume_cm3) or volume_cm3 <= 0:
