@@ -17,7 +17,7 @@ decide how to surface that failure.
 from __future__ import annotations
 
 import numpy as np
-from scipy.ndimage import binary_dilation
+from scipy.ndimage import binary_dilation, distance_transform_edt
 
 
 def _plane_from_points(
@@ -192,6 +192,52 @@ def estimate_volume_cm3(
         f"{float(background_points[:, 1].max()):.4f}",
         flush=True,
     )
+    print("=" * 60, flush=True)
+
+        # --- Diagnostic: is the near-mask region flat?
+    #
+    # The plane fit only works if the background points are on one
+    # flat surface (the plate). If the depth map is unreliable near
+    # the mask, or if the sample includes table/wall/objects, the
+    # fit will be wrong.
+    #
+    # Measure bg_z std at three distances from the food mask:
+    #   near  (0–20 px):   should be plate surface
+    #   mid   (20–100 px): should still be plate, approaching edge
+    #   far   (100–500 px): table, wall, scene — not plate
+    #
+    # If near std is small (<3 cm) and far std is large, the scene
+    # varies and the fix is to restrict sampling to the near ring.
+    # If near std is also large, either Depth Pro is unreliable on
+    # background, or the mask is bleeding into the plate.
+    #
+    # The ring boundaries are diagnostic-only. They are not used to
+    # choose the plane; they are used to decide which fix applies.
+
+    distance_from_mask = distance_transform_edt(~mask)
+
+    rings = [
+        ("near  0-20 px",   (distance_from_mask > 0)   & (distance_from_mask <= 20)),
+        ("mid  20-100 px",  (distance_from_mask > 20)  & (distance_from_mask <= 100)),
+        ("far 100-500 px",  (distance_from_mask > 100) & (distance_from_mask <= 500)),
+    ]
+
+    print("=" * 60, flush=True)
+    print("BG DEPTH BY DISTANCE FROM MASK", flush=True)
+    for name, ring in rings:
+        ring_valid = ring & np.isfinite(depth) & (depth > 0)
+        zs = depth[ring_valid]
+        if len(zs) == 0:
+            print(f"  {name}: n=0", flush=True)
+            continue
+        print(
+            f"  {name}: n={len(zs)} "
+            f"min={float(zs.min()):.4f} "
+            f"med={float(np.median(zs)):.4f} "
+            f"max={float(zs.max()):.4f} "
+            f"std={float(zs.std()):.4f}",
+            flush=True,
+        )
     print("=" * 60, flush=True)
 
     # --- RANSAC plane fit.
