@@ -169,7 +169,7 @@ def estimate_volume_cm3(
     background_y = (by - cy) * bz / focal_length_px
     background_points = np.column_stack((background_x, background_y, bz))
 
-        print("=" * 60, flush=True)
+    print("=" * 60, flush=True)
     print("PLANE FIT INPUTS", flush=True)
     print(f"  background points: {len(background_points)}", flush=True)
     print(
