@@ -284,29 +284,38 @@ def estimate_volume_cm3(
     print("=" * 60, flush=True)
     print("VOLUME ENGINE INTERMEDIATE", flush=True)
     print(f"  focal_length_px: {focal_length_px}", flush=True)
+    print(f"  cx, cy: {cx:.1f}, {cy:.1f}", flush=True)
     print(f"  plane_normal: {plane_normal}", flush=True)
-    print(f"  plane_offset: {plane_offset}", flush=True)
+    print(f"  plane_offset: {plane_offset:.6f}", flush=True)
+    print(f"  mask pixels (valid_food): {int(np.count_nonzero(valid_food))}", flush=True)
     print(f"  valid_volume pixels: {int(np.count_nonzero(valid_volume))}", flush=True)
-    print(
-        f"  surface_ray_distance min/med/max: "
-        f"{surface_ray_distance.min():.4f} / "
-        f"{float(np.median(surface_ray_distance)):.4f} / "
-        f"{surface_ray_distance.max():.4f}",
-        flush=True,
-    )
-    print(
-        f"  plane_ray_distance min/med/max: "
-        f"{plane_ray_distance.min():.4f} / "
-        f"{float(np.median(plane_ray_distance)):.4f} / "
-        f"{plane_ray_distance.max():.4f}",
-        flush=True,
-    )
+    print(f"  support_inliers: {int(support_inliers)}", flush=True)
+    print(f"  support_ratio: {float(support_ratio):.4f}", flush=True)
+    print(f"  food_z (depth inside mask): "
+          f"min={float(food_z.min()):.4f} "
+          f"med={float(np.median(food_z)):.4f} "
+          f"max={float(food_z.max()):.4f}", flush=True)
+    print(f"  surface_ray_distance: "
+          f"min={float(surface_ray_distance.min()):.4f} "
+          f"med={float(np.median(surface_ray_distance)):.4f} "
+          f"max={float(surface_ray_distance.max()):.4f}", flush=True)
+    print(f"  plane_ray_distance: "
+          f"min={float(plane_ray_distance.min()):.4f} "
+          f"med={float(np.median(plane_ray_distance)):.4f} "
+          f"max={float(plane_ray_distance.max()):.4f}", flush=True)
     _height = plane_ray_distance - surface_ray_distance
-    print(
-        f"  height min/med/max: "
-        f"{_height.min():.4f} / {float(np.median(_height)):.4f} / {_height.max():.4f}",
-        flush=True,
-    )
+    print(f"  height (plane - surface): "
+          f"min={float(_height.min()):.4f} "
+          f"med={float(np.median(_height)):.4f} "
+          f"max={float(_height.max()):.4f}", flush=True)
+    print(f"  ray_x range: {float(ray_x.min()):.4f} .. {float(ray_x.max()):.4f}", flush=True)
+    print(f"  ray_y range: {float(ray_y.min()):.4f} .. {float(ray_y.max()):.4f}", flush=True)
+    print(f"  solid_angle_per_pixel: "
+          f"min={float(solid_angle_per_pixel.min()):.3e} "
+          f"med={float(np.median(solid_angle_per_pixel)):.3e} "
+          f"max={float(solid_angle_per_pixel.max()):.3e}", flush=True)
+    print(f"  ray_volume_m3 (per pixel) sum: {float(np.sum(ray_volume_m3)):.6f}", flush=True)
+    print("=" * 60, flush=True)
 
     volume_cm3 = volume_m3 * 1_000_000.0
 
