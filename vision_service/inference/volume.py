@@ -169,6 +169,31 @@ def estimate_volume_cm3(
     background_y = (by - cy) * bz / focal_length_px
     background_points = np.column_stack((background_x, background_y, bz))
 
+        print("=" * 60, flush=True)
+    print("PLANE FIT INPUTS", flush=True)
+    print(f"  background points: {len(background_points)}", flush=True)
+    print(
+        f"  bg_z: min={float(bz.min()):.4f} "
+        f"med={float(np.median(bz)):.4f} "
+        f"max={float(bz.max()):.4f}",
+        flush=True,
+    )
+    print(
+        f"  bg_z std: {float(bz.std()):.4f}",
+        flush=True,
+    )
+    print(
+        f"  bg_x range: {float(background_points[:, 0].min()):.4f} .. "
+        f"{float(background_points[:, 0].max()):.4f}",
+        flush=True,
+    )
+    print(
+        f"  bg_y range: {float(background_points[:, 1].min()):.4f} .. "
+        f"{float(background_points[:, 1].max()):.4f}",
+        flush=True,
+    )
+    print("=" * 60, flush=True)
+
     # --- RANSAC plane fit.
 
     rng = np.random.default_rng(42)
