@@ -274,6 +274,14 @@ def estimate_volume_cm3(
         background_points, best_normal, best_offset
     )
 
+        # TEST: force plane to the correct physical position.
+    # Compute where the plane SHOULD be: the median food surface
+    # plus the actual food height (we set height = 3 cm for now).
+    _test_plate = float(np.median(food_z)) + 0.03
+    print(f"  TEST: forcing plane_offset to {_test_plate}", flush=True)
+    plane_normal = np.array([0.0, 0.0, -1.0])
+    plane_offset = -_test_plate
+
     support_ratio = support_inliers / len(background_points)
 
     if support_ratio < 0.25:
