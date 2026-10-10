@@ -12,6 +12,11 @@ Public API:
 The function raises ValueError when the supporting geometry is not
 reliable rather than returning a fabricated volume. Callers must
 decide how to surface that failure.
+
+NOTE: this file is currently in a DIAGNOSTIC state (branch
+chore/volume-diagnostics). It prints intermediate values and contains
+a temporary test block that forces the plane to a known position.
+All diagnostic code must be removed before this branch is merged.
 """
 
 from __future__ import annotations
@@ -194,7 +199,7 @@ def estimate_volume_cm3(
     )
     print("=" * 60, flush=True)
 
-        # --- Diagnostic: is the near-mask region flat?
+    # --- Diagnostic: is the near-mask region flat?
     #
     # The plane fit only works if the background points are on one
     # flat surface (the plate). If the depth map is unreliable near
@@ -202,9 +207,9 @@ def estimate_volume_cm3(
     # fit will be wrong.
     #
     # Measure bg_z std at three distances from the food mask:
-    #   near  (0–20 px):   should be plate surface
-    #   mid   (20–100 px): should still be plate, approaching edge
-    #   far   (100–500 px): table, wall, scene — not plate
+    #   near  (0-20 px):   should be plate surface
+    #   mid   (20-100 px): should still be plate, approaching edge
+    #   far   (100-500 px): table, wall, scene - not plate
     #
     # If near std is small (<3 cm) and far std is large, the scene
     # varies and the fix is to restrict sampling to the near ring.
@@ -274,14 +279,6 @@ def estimate_volume_cm3(
         background_points, best_normal, best_offset
     )
 
-        # TEST: force plane to the correct physical position.
-    # Compute where the plane SHOULD be: the median food surface
-    # plus the actual food height (we set height = 3 cm for now).
-    _test_plate = float(np.median(food_z)) + 0.03
-    print(f"  TEST: forcing plane_offset to {_test_plate}", flush=True)
-    plane_normal = np.array([0.0, 0.0, -1.0])
-    plane_offset = -_test_plate
-
     support_ratio = support_inliers / len(background_points)
 
     if support_ratio < 0.25:
@@ -293,9 +290,30 @@ def estimate_volume_cm3(
         plane_offset = -plane_offset
 
     # --- Food pixels -> rays.
+    #
+    # food_z must be defined before the diagnostic test block below.
 
     fy, fx = np.where(valid_food)
     food_z = depth[fy, fx]
+
+    # --- DIAGNOSTIC TEST: force the plane to a physically correct
+    # position and see whether the volume engine produces the right
+    # answer. If the volume drops to ~1x ground truth, the plane fit
+    # is the sole cause. If it stays 25x off, the volume math itself
+    # is broken.
+    #
+    # This block must be removed before merge.
+
+    _test_height_m = 0.03
+    _test_plate_z = float(np.median(food_z)) + _test_height_m
+    print("=" * 60, flush=True)
+    print("TEST: forcing plane to horizontal at:", flush=True)
+    print(f"  median(food_z) = {float(np.median(food_z)):.4f}", flush=True)
+    print(f"  forced plate z = {_test_plate_z:.4f} (food_z + {_test_height_m})", flush=True)
+    print("=" * 60, flush=True)
+
+    plane_normal = np.array([0.0, 0.0, -1.0])
+    plane_offset = -_test_plate_z
 
     ray_x = (fx - cx) / focal_length_px
     ray_y = (fy - cy) / focal_length_px
