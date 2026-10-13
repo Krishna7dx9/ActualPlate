@@ -13,15 +13,31 @@ Auth: if VISION_API_TOKEN is set in the environment, /detect requires
 the header X-API-Token to match. If unset, the endpoint is open.
 This is intended for local/Colab development; set the token in
 production.
+
+Response format:
+
+The default response includes only summary fields. If the request
+sets `include_arrays=true`, the response additionally includes
+base64-encoded numpy arrays:
+
+    depth_map_b64    one per request, (H, W) float32
+    mask_b64         one per food, (H, W) uint8
+
+These are consumed by the ablation harness to run variants B and
+C locally on the laptop. The default backend pipeline ignores
+them; they exist only to enable offline diagnosis.
 """
 
 from __future__ import annotations
 
+import base64
+import io
 import os
 import shutil
 import tempfile
 import uuid
 
+import numpy as np
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
@@ -39,15 +55,25 @@ app = FastAPI(
 
 
 def _check_auth(x_api_token: str | None) -> None:
-    """
-    Enforce X-API-Token when VISION_API_TOKEN is configured.
-
-    No-op when the env var is unset (dev mode).
-    """
     if VISION_API_TOKEN is None:
         return
     if x_api_token != VISION_API_TOKEN:
         raise HTTPException(status_code=401, detail="Invalid API token.")
+
+
+def _encode_npz(array: np.ndarray) -> str:
+    """
+    Compress and base64-encode a numpy array.
+
+    Uses np.savez_compressed for compactness. The result is a
+    single string that a client can decode with:
+
+        raw = base64.b64decode(s)
+        arr = np.load(io.BytesIO(raw))["arr"]
+    """
+    buf = io.BytesIO()
+    np.savez_compressed(buf, arr=array)
+    return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
 @app.get("/health")
@@ -63,6 +89,7 @@ async def health() -> dict:
 async def detect(
     file: UploadFile = File(...),
     labels: str = Form(...),
+    include_arrays: bool = Form(False),
     x_api_token: str | None = Header(default=None),
 ) -> JSONResponse:
 
@@ -83,9 +110,6 @@ async def detect(
     image_path: str | None = None
 
     try:
-        # Save uploaded image to a temp file. tempfile chooses a
-        # platform-appropriate directory; we only need to keep the
-        # handle alive long enough to read it.
         with tempfile.NamedTemporaryFile(
             delete=False,
             suffix=".jpg",
@@ -98,10 +122,6 @@ async def detect(
             labels=food_labels,
         )
 
-        # Compute volume per detection. The volume engine raises
-        # ValueError for data-quality problems (not enough surface,
-        # plane not planar, etc.). Those are expected and are reported
-        # per food. Any other exception is a bug and propagates.
         foods = []
 
         for food, mask in zip(result.foods, result.masks):
@@ -127,6 +147,12 @@ async def detect(
                 food_record["volume_status"] = "unreliable"
                 food_record["volume_error"] = str(exc)
 
+            # Optional raw mask for offline ablation.
+            if include_arrays:
+                food_record["mask_b64"] = _encode_npz(
+                    np.asarray(mask, dtype=np.uint8)
+                )
+
             foods.append(food_record)
 
         response = {
@@ -137,6 +163,12 @@ async def detect(
             "depth_unit": result.depth_unit,
             "request_id": request_id,
         }
+
+        # Optional raw depth map for offline ablation.
+        if include_arrays:
+            response["depth_map_b64"] = _encode_npz(
+                np.asarray(result.depth_map, dtype=np.float32)
+            )
 
         return JSONResponse(content=response)
 
