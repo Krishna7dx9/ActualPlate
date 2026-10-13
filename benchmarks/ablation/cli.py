@@ -3,8 +3,12 @@ Command-line entry point for the volume ablation harness.
 
 Usage:
 
+    # GT-only variants (D..I). No Colab needed. Runs on laptop.
     python -m benchmarks.ablation.cli --dataset metafood3d --limit 20
-    python -m benchmarks.ablation.cli --dataset metafood3d --category Bagel
+
+    # All variants (A..I). Requires live Colab /detect endpoint.
+    python -m benchmarks.ablation.cli --dataset metafood3d --limit 20 \
+        --predictions metafood3d --endpoint https://<tunnel>/detect
 
 Behavior:
 
@@ -15,21 +19,15 @@ Behavior:
       contributions.
 
 Predictions (Depth Pro + SAM2 output) are optional. When they
-cannot be produced -- for example, on a laptop without a GPU --
-the harness still runs the GT-only variants D..I. Variants A,
-B, C are skipped in that case because they need live
-predictions.
+cannot be produced -- for example, on a laptop without a GPU and
+without a live Colab endpoint -- the harness still runs the
+GT-only variants D..I. Variants A, B, C are skipped in that
+case because they need live predictions.
 
-The predictions function is chosen from an environment variable:
+Prediction source is chosen with --predictions:
 
-    PREDICTIONS=none       (default) no predictions, run D..I
-    PREDICTIONS=metafood3d use Depth Pro + SAM2 on the item RGB
-    PREDICTIONS=<script>   path to a Python module exporting
-                           `predictions_for_item(item) -> Predictions`
-
-For the current phase, use PREDICTIONS=none. Variants D..I
-answer the question "does the volume chain work when fed correct
-inputs?" That is enough to isolate depth vs mask vs formula.
+    none        (default) skip A, B, C
+    metafood3d  POST each item to Colab /detect
 """
 
 from __future__ import annotations
@@ -37,7 +35,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from benchmarks.ablation.base import Item
@@ -53,32 +51,47 @@ from benchmarks.ablation.report import (
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
 
 
-# --- Prediction stubs ------------------------------------------------
+# --- Prediction sources ---------------------------------------------
 
 
 def predictions_none(item: Item) -> Predictions:
     """
-    Sentinels for the 'no predictions' path.
+    Sentinel for the 'no predictions' path.
 
-    Raising NotImplementedError tells run_ablation to skip A,
-    B, C for this item and run only the GT-only variants.
+    Raising NotImplementedError tells run_ablation to skip
+    variants A, B, C for this item and run only the GT-only
+    variants D..I.
     """
     raise NotImplementedError("PREDICTIONS=none")
 
 
 def predictions_metafood3d(item: Item) -> Predictions:
     """
-    Run Depth Pro and SAM2 on the item's RGB image.
+    Run Depth Pro and SAM2 on the item's RGB image by POSTing
+    to the Colab /detect endpoint.
 
-    This function requires the GPU inference service to be
-    running and reachable via VISION_INFERENCE_ENDPOINT. It is
-    not implemented on the laptop. The Colab cell that drives
-    the harness wires this in when running there.
+    The endpoint must be provided via the --endpoint CLI arg
+    or the VISION_INFERENCE_ENDPOINT env var. It is not needed
+    when running with --predictions none.
     """
-    raise NotImplementedError(
-        "predictions_metafood3d not implemented on this host. "
-        "Run the harness from Colab."
-    )
+    endpoint = _resolve_endpoint()
+    from benchmarks.ablation.remote import predictions_from_endpoint
+    return predictions_from_endpoint(item, endpoint)
+
+
+def _resolve_endpoint() -> str:
+    """
+    Return the full URL to the /detect endpoint.
+    """
+    raw = os.environ.get("VISION_INFERENCE_ENDPOINT", "").strip()
+    if not raw:
+        raise ValueError(
+            "predictions=metafood3d requires the endpoint. "
+            "Set VISION_INFERENCE_ENDPOINT in .env or pass --endpoint."
+        )
+    if raw.endswith("/detect"):
+        return raw
+    return raw.rstrip("/") + "/detect"
 
 
 def _resolve_predictions_fn(name: str):
@@ -86,7 +99,7 @@ def _resolve_predictions_fn(name: str):
         return predictions_none
     if name == "metafood3d":
         return predictions_metafood3d
-    raise ValueError(f"unknown PREDICTIONS value: {name}")
+    raise ValueError(f"unknown predictions value: {name}")
 
 
 # --- Adapters --------------------------------------------------------
@@ -130,19 +143,37 @@ def main(argv: list[str] | None = None) -> int:
         help="Prediction source: none (default), metafood3d.",
     )
     parser.add_argument(
+        "--endpoint",
+        default=None,
+        help=(
+            "Colab /detect endpoint. Only needed when "
+            "--predictions=metafood3d. Can also be set via "
+            "VISION_INFERENCE_ENDPOINT."
+        ),
+    )
+    parser.add_argument(
         "--output",
         default=None,
-        help="CSV path. Default: benchmarks/ablation/results/<dataset>_<ts>.csv",
+        help=(
+            "CSV path. Default: "
+            "benchmarks/ablation/results/<dataset>_<ts>.csv"
+        ),
     )
 
     args = parser.parse_args(argv)
+
+    if args.endpoint:
+        os.environ["VISION_INFERENCE_ENDPOINT"] = args.endpoint
 
     print("=" * 70)
     print("VOLUME ABLATION HARNESS")
     print("=" * 70)
     print(f"  dataset:     {args.dataset}")
     print(f"  category:    {args.category or '(all)'}")
-    print(f"  limit:       {args.limit if args.limit is not None else '(all)'}")
+    print(
+        f"  limit:       "
+        f"{args.limit if args.limit is not None else '(all)'}"
+    )
     print(f"  predictions: {args.predictions}")
     print("=" * 70)
     print()
@@ -167,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
         out_path = Path(args.output)
     else:
         RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-        ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         out_path = RESULTS_DIR / f"{args.dataset}_{ts}.csv"
 
     write_csv(rows, out_path)
