@@ -48,6 +48,13 @@ from typing import Callable
 
 import numpy as np
 
+# Load .env if present so VISION_INFERENCE_ENDPOINT comes from the
+# same place the app uses.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
 
