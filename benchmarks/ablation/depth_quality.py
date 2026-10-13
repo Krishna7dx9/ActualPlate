@@ -118,7 +118,38 @@ def depth_pro_predictor(item):
     return depth_map, float(f_px)
 
 
-PREDICTORS = {"depth_pro": depth_pro_predictor}
+def remote_predictor(item):
+    """
+    Ask the Colab /detect endpoint for predictions.
+
+    Requires VISION_INFERENCE_ENDPOINT to be set (e.g. in .env or
+    as an environment variable before invoking the CLI). Returns
+    the depth map from the live pipeline and the focal length the
+    server used.
+
+    The endpoint must be running the branch that includes the
+    include_arrays change (feat/detect-returns-arrays), otherwise
+    the response will not contain depth_map_b64.
+    """
+    from benchmarks.ablation.remote import predictions_from_endpoint
+
+    endpoint = os.environ.get("VISION_INFERENCE_ENDPOINT", "").strip()
+    if not endpoint:
+        raise ValueError(
+            "VISION_INFERENCE_ENDPOINT not set. Export the tunnel URL "
+            "before running, or pass it via .env."
+        )
+    if not endpoint.endswith("/detect"):
+        endpoint = endpoint.rstrip("/") + "/detect"
+
+    preds = predictions_from_endpoint(item, endpoint)
+    return preds.depth_map, preds.focal_length_px
+
+
+PREDICTORS = {
+    "depth_pro": depth_pro_predictor,
+    "remote": remote_predictor,
+}
 
 
 # ----------------------------------------------------------------------
