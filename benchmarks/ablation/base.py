@@ -67,6 +67,7 @@ class Item:
     gt_weight_g: float | None = None
     gt_depth_map: np.ndarray | None = None
     gt_mask: np.ndarray | None = None
+    food_label: str | None = None
 
 
 class Adapter(ABC):
