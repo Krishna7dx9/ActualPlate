@@ -39,6 +39,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from benchmarks.ablation.base import Item
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from benchmarks.ablation.variants import Predictions
 from benchmarks.ablation.run import run_ablation
 from benchmarks.ablation.report import (
