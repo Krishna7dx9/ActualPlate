@@ -151,6 +151,12 @@ def remote_predictor(item, focal_px=None):
     return preds.depth_map, preds.focal_length_px
 
 
+PREDICTORS = {
+    "depth_pro": depth_pro_predictor,
+    "remote": remote_predictor,
+}
+
+
 # ----------------------------------------------------------------------
 # Metrics
 # ----------------------------------------------------------------------
