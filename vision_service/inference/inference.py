@@ -165,9 +165,15 @@ def _visualize_depth(depth_map) -> None:
 def detect_and_measure(
     image_path: str,
     labels: list[str],
+    focal_px_override: float | None = None,
 ) -> InferenceResult:
     """
     Run the full inference pipeline on one image.
+
+    focal_px_override, if provided, is used as the focal length
+    passed to Depth Pro when the image has no EXIF focal. This
+    avoids Depth Pro's internal focal guess, which is unreliable
+    on PNG inputs.
 
     Raises ValueError for malformed inputs. Other exceptions
     (model, CUDA, I/O) propagate to the caller.
@@ -230,6 +236,18 @@ def detect_and_measure(
     # --- Depth Pro: image -> metric depth map + focal length.
 
     depth_image, _, f_px = depth_pro.load_rgb(image_path)
+
+    # When the image has no EXIF (PNG, screenshots, Blender renders),
+    # Depth Pro guesses a focal. Its guess is 1.5-13x wrong on the
+    # MetaFood3D renders, which propagates to the volume as a scale
+    # error. If the caller knows the true focal, use it instead.
+    if f_px is None and focal_px_override is not None:
+        f_px = torch.tensor(
+            float(focal_px_override),
+            device=DEVICE,
+            dtype=torch.float32,
+        )
+
     depth_tensor = depth_transform(depth_image).to(DEVICE)
 
     with torch.no_grad():

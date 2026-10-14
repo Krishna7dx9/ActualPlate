@@ -90,6 +90,7 @@ def estimate_volume_cm3(
     depth_map: np.ndarray,
     mask: np.ndarray,
     focal_length_px: float,
+    return_debug: bool = False,
 ) -> dict:
     """
     Estimate physical food volume in cm^3.
@@ -98,6 +99,10 @@ def estimate_volume_cm3(
         depth_map: metric depth in meters, shape (H, W).
         mask: binary food mask, shape (H, W).
         focal_length_px: camera focal length in pixels.
+        return_debug: if True, include a "_debug" key with plane-fit
+            parameters and per-stage depth/height statistics. Used by
+            benchmarks/ablation/formula_diagnostic.py to isolate whether
+            an error is in the depth, the mask, the focal, or the plane.
 
     Method:
         1. Back-project background pixels into 3D.
@@ -113,6 +118,7 @@ def estimate_volume_cm3(
             "support_inliers": int,
             "support_ratio": float,
             "valid_volume_pixels": int,
+            "_debug": { ... }   # only when return_debug=True
         }
 
     Raises:
@@ -288,9 +294,34 @@ def estimate_volume_cm3(
             "Physical volume reconstruction produced an invalid result."
         )
 
-    return {
+    result = {
         "volume_cm3": float(volume_cm3),
         "support_inliers": int(support_inliers),
         "support_ratio": float(support_ratio),
         "valid_volume_pixels": int(np.count_nonzero(valid_volume)),
     }
+
+    if return_debug:
+        height = plane_ray_distance - surface_ray_distance
+        result["_debug"] = {
+            "plane_normal": plane_normal.tolist(),
+            "plane_offset": float(plane_offset),
+            "support_inliers": int(support_inliers),
+            "support_ratio": float(support_ratio),
+            "food_z_min": float(np.min(food_z)),
+            "food_z_median": float(np.median(food_z)),
+            "food_z_max": float(np.max(food_z)),
+            "surface_ray_distance_min": float(np.min(surface_ray_distance)),
+            "surface_ray_distance_median": float(np.median(surface_ray_distance)),
+            "surface_ray_distance_max": float(np.max(surface_ray_distance)),
+            "plane_ray_distance_min": float(np.min(plane_ray_distance)),
+            "plane_ray_distance_median": float(np.median(plane_ray_distance)),
+            "plane_ray_distance_max": float(np.max(plane_ray_distance)),
+            "height_min": float(np.min(height)),
+            "height_median": float(np.median(height)),
+            "height_max": float(np.max(height)),
+            "valid_volume_pixels": int(np.count_nonzero(valid_volume)),
+            "volume_m3": float(volume_m3),
+        }
+
+    return result

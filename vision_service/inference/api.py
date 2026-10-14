@@ -90,6 +90,7 @@ async def detect(
     file: UploadFile = File(...),
     labels: str = Form(...),
     include_arrays: bool = Form(False),
+    focal_px: float | None = Form(None),
     x_api_token: str | None = Header(default=None),
 ) -> JSONResponse:
 
@@ -120,6 +121,7 @@ async def detect(
         result = detect_and_measure(
             image_path=image_path,
             labels=food_labels,
+            focal_px_override=focal_px,
         )
 
         foods = []
