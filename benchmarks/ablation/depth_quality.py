@@ -125,18 +125,14 @@ def depth_pro_predictor(item):
     return depth_map, float(f_px)
 
 
-def remote_predictor(item):
+def remote_predictor(item, focal_px=None):
     """
     Ask the Colab /detect endpoint for predictions.
 
-    Requires VISION_INFERENCE_ENDPOINT to be set (e.g. in .env or
-    as an environment variable before invoking the CLI). Returns
-    the depth map from the live pipeline and the focal length the
-    server used.
-
-    The endpoint must be running the branch that includes the
-    include_arrays change (feat/detect-returns-arrays), otherwise
-    the response will not contain depth_map_b64.
+    If focal_px is provided, it is sent as the `focal_px` form
+    field, which the server forwards to Depth Pro as the focal
+    override. Used by the diagnostic to test whether Depth Pro's
+    internal focal guess is the source of the volume error.
     """
     from benchmarks.ablation.remote import predictions_from_endpoint
 
@@ -149,14 +145,10 @@ def remote_predictor(item):
     if not endpoint.endswith("/detect"):
         endpoint = endpoint.rstrip("/") + "/detect"
 
-    preds = predictions_from_endpoint(item, endpoint)
+    preds = predictions_from_endpoint(
+        item, endpoint, focal_px=focal_px
+    )
     return preds.depth_map, preds.focal_length_px
-
-
-PREDICTORS = {
-    "depth_pro": depth_pro_predictor,
-    "remote": remote_predictor,
-}
 
 
 # ----------------------------------------------------------------------
