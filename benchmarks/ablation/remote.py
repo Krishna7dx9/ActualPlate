@@ -41,8 +41,11 @@ def predictions_from_endpoint(
     The server forwards it to Depth Pro as a focal override, used
     by the diagnostic to test Depth Pro's internal focal guess.
     """
-    labels = item.id.split("/", 1)[-1]
-    labels = labels.replace("_", " ").strip()
+    if getattr(item, "food_label", None):
+        labels = item.food_label
+    else:
+        labels = item.id.split("/", 1)[-1]
+        labels = labels.replace("_", " ").strip()
 
     data = {
         "labels": labels,

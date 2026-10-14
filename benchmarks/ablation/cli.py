@@ -109,6 +109,9 @@ def _get_adapter(dataset: str):
     if dataset == "metafood3d":
         from benchmarks.ablation.metafood3d import MetaFood3DAdapter
         return MetaFood3DAdapter()
+    if dataset == "simplefood45":
+        from benchmarks.ablation.simplefood45 import SimpleFood45Adapter
+        return SimpleFood45Adapter()
     raise ValueError(f"unknown dataset: {dataset}")
 
 
@@ -123,7 +126,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--dataset",
         required=True,
-        choices=["metafood3d"],
+        choices=["metafood3d", "simplefood45"],
         help="Dataset adapter to use.",
     )
     parser.add_argument(
