@@ -242,7 +242,11 @@ def detect_and_measure(
     # MetaFood3D renders, which propagates to the volume as a scale
     # error. If the caller knows the true focal, use it instead.
     if f_px is None and focal_px_override is not None:
-        f_px = float(focal_px_override)
+        f_px = torch.tensor(
+            float(focal_px_override),
+            device=DEVICE,
+            dtype=torch.float32,
+        )
 
     depth_tensor = depth_transform(depth_image).to(DEVICE)
 
