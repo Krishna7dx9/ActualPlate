@@ -28,6 +28,53 @@ def _decode_npz(b64: str) -> np.ndarray:
         return data["arr"]
 
 
+def _post_with_retry(url, *, files, data, timeout_s, attempts=4):
+    """
+    POST with retry on transient network errors.
+
+    Cloudflare free tunnels drop connections during long GPU
+    inference. Retry the request with exponential backoff. Only
+    retry on network-level failures (5xx from Cloudflare, connection
+    errors, timeouts). Do not retry on 4xx -- those are real bugs.
+    """
+    import time
+    import requests
+
+    last_exc = None
+    for i in range(attempts):
+        try:
+            r = requests.post(
+                url, files=files, data=data, timeout=timeout_s
+            )
+            if r.status_code < 500:
+                return r
+            last_exc = requests.HTTPError(
+                f"{r.status_code} from tunnel"
+            )
+        except (
+            requests.ConnectionError,
+            requests.Timeout,
+        ) as exc:
+            last_exc = exc
+
+        wait = min(2 ** i, 30)
+        print(f"    retry {i + 1}/{attempts} after {wait}s: {last_exc}")
+        time.sleep(wait)
+        # Re-open the file -- requests closes it after the first POST.
+        files = {
+            k: (
+                v[0],
+                open(v[1].name, "rb") if hasattr(v[1], "name") else v[1],
+                v[2],
+            )
+            for k, v in files.items()
+        }
+
+    if last_exc:
+        raise last_exc
+    raise RuntimeError("retry loop exited without result")
+
+
 def predictions_from_endpoint(
     item: Item,
     endpoint: str,
