@@ -50,7 +50,7 @@ from fastapi.responses import JSONResponse
 
 from vision_service.inference.inference import detect_and_measure
 from vision_service.inference.models import models_loaded
-from vision_service.inference.volume import estimate_volume_cm3
+from vision_service.inference.volume import estimate_volume_cm3_v2 as estimate_volume_cm3
 
 
 VISION_API_TOKEN = os.environ.get("VISION_API_TOKEN")

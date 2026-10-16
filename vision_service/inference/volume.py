@@ -336,3 +336,64 @@ def estimate_volume_cm3(
         }
 
     return result
+def estimate_volume_cm3_v2(
+    depth_map: np.ndarray,
+    mask: np.ndarray,
+    focal_length_px: float,
+    height_threshold_m: float = 0.020,
+) -> dict:
+    """
+    Volume from the mask itself, no outside plane needed.
+
+    The mask is assumed to cover the food AND the plate. Fit a
+    plane to the mask pixels; the dominant surface is the plate.
+    Pixels whose height above that plane exceeds height_threshold_m
+    are food. Volume = sum over food pixels of height * footprint.
+    """
+    depth = np.asarray(depth_map, dtype=np.float32)
+    mask = np.asarray(mask, dtype=bool)
+    h, w = depth.shape
+    cx = (w - 1) / 2.0
+    cy = (h - 1) / 2.0
+
+    fy, fx = np.where(mask & np.isfinite(depth) & (depth > 0))
+    if len(fx) < 200:
+        raise ValueError("Mask too small")
+
+    z = depth[fy, fx]
+    x = (fx - cx) * z / focal_length_px
+    y = (fy - cy) * z / focal_length_px
+
+    # RANSAC plane fit: z = a*x + b*y + c
+    try:
+        from sklearn.linear_model import RANSACRegressor, LinearRegression
+        ransac = RANSACRegressor(
+            LinearRegression(),
+            residual_threshold=0.010,
+            random_state=42,
+            min_samples=10,
+        )
+        ransac.fit(np.column_stack([x, y]), z)
+        a = float(ransac.estimator_.coef_[0])
+        b = float(ransac.estimator_.coef_[1])
+        c = float(ransac.estimator_.intercept_)
+    except Exception as exc:
+        raise ValueError(f"Plane fit failed: {exc}")
+
+    plane_z = a * x + b * y + c
+    height = plane_z - z
+
+    food = height > height_threshold_m
+    if int(food.sum()) < 50:
+        raise ValueError("No food pixels above plate")
+
+    pixel_area_m2 = (z ** 2) / (focal_length_px ** 2)
+    volume_m3 = float(np.sum(height[food] * pixel_area_m2[food]))
+    volume_cm3 = volume_m3 * 1e6
+
+    return {
+        "volume_cm3": volume_cm3,
+        "support_inliers": int(ransac.inlier_mask_.sum()),
+        "support_ratio": float(ransac.inlier_mask_.mean()),
+        "valid_volume_pixels": int(food.sum()),
+    }
