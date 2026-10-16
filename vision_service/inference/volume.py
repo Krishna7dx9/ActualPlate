@@ -374,7 +374,16 @@ def estimate_volume_cm3_v2(
 
     food = height > height_threshold_m
     if int(food.sum()) < 50:
-        raise ValueError("No food pixels above plate")
+        raise ValueError(
+            f"No food pixels above plate (thr={height_threshold_m:.3f}m) "
+            f"plane a={a:.6f} b={b:.6f} c={c:.4f} "
+            f"z_min={float(np.min(z)):.4f} z_max={float(np.max(z)):.4f} "
+            f"z_p50={float(np.median(z)):.4f} "
+            f"h_max={float(np.max(height)):.4f} "
+            f"h_p50={float(np.percentile(height, 50)):.4f} "
+            f"h_p90={float(np.percentile(height, 90)):.4f} "
+            f"h_p99={float(np.percentile(height, 99)):.4f}"
+        )
 
     pixel_area_m2 = (z ** 2) / (focal_length_px ** 2)
     volume_m3 = float(np.sum(height[food] * pixel_area_m2[food]))
