@@ -86,10 +86,17 @@ def predictions_from_endpoint(
 
     mask = _decode_npz(foods[0]["mask_b64"]).astype(bool)
 
+    # The server returns arrays downsampled to a 512-px max side.
+    # image_width and focal_length_px refer to the original grid.
+    # Scale the focal by the same factor the arrays were downsampled
+    # by, so the ray geometry matches the grid the formula runs on.
+    scale = depth_map.shape[1] / float(body["image_width"])
+    focal_for_grid = float(body["focal_length_px"]) * scale
+
     return Predictions(
         depth_map=depth_map.astype(np.float32),
         mask=mask,
-        focal_length_px=float(body["focal_length_px"]),
+        focal_length_px=focal_for_grid,
     )
     """
     POST one item to Colab /detect and return Predictions.
