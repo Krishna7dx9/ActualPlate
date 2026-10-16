@@ -340,9 +340,20 @@ def estimate_volume_cm3_v2(
     depth_map: np.ndarray,
     mask: np.ndarray,
     focal_length_px: float,
-    height_threshold_m: float = 0.020,
+    adaptive_percentile: float = 90.0,
+    adaptive_factor: float = 0.35,
+    min_threshold_m: float = 0.003,
     return_debug: bool = False,
 ) -> dict:
+    """
+    Volume from the mask itself, with an adaptive height threshold.
+
+    Fits a plane to the mask pixels (dominant surface = plate). The
+    food threshold is data-driven: adaptive_factor times the
+    adaptive_percentile of the positive height distribution, floored
+    at min_threshold_m. A fixed 2 cm threshold rejected real foods
+    whose Depth Pro height bump was 5-15 mm (513-photo sweep).
+    """
     depth = np.asarray(depth_map, dtype=np.float32)
     mask = np.asarray(mask, dtype=bool)
     h, w = depth.shape
@@ -372,17 +383,25 @@ def estimate_volume_cm3_v2(
     plane_z = a * x + b * y + c
     height = plane_z - z
 
-    food = height > height_threshold_m
+    positive = height[height > 0]
+    if len(positive) < 100:
+        raise ValueError(f"Not enough positive-height pixels (n={len(positive)})")
+
+    p_high = float(np.percentile(positive, adaptive_percentile))
+    threshold = max(min_threshold_m, p_high * adaptive_factor)
+
+    if p_high < min_threshold_m:
+        raise ValueError(
+            f"Depth did not resolve food (p{adaptive_percentile:.0f}="
+            f"{p_high*1000:.1f}mm < {min_threshold_m*1000:.1f}mm)"
+        )
+
+    food = height > threshold
     if int(food.sum()) < 50:
         raise ValueError(
-            f"No food pixels above plate (thr={height_threshold_m:.3f}m) "
-            f"plane a={a:.6f} b={b:.6f} c={c:.4f} "
-            f"z_min={float(np.min(z)):.4f} z_max={float(np.max(z)):.4f} "
-            f"z_p50={float(np.median(z)):.4f} "
-            f"h_max={float(np.max(height)):.4f} "
-            f"h_p50={float(np.percentile(height, 50)):.4f} "
-            f"h_p90={float(np.percentile(height, 90)):.4f} "
-            f"h_p99={float(np.percentile(height, 99)):.4f}"
+            f"No food pixels above adaptive plate "
+            f"(thr={threshold*1000:.1f}mm p{adaptive_percentile:.0f}="
+            f"{p_high*1000:.1f}mm)"
         )
 
     pixel_area_m2 = (z ** 2) / (focal_length_px ** 2)
@@ -402,15 +421,11 @@ def estimate_volume_cm3_v2(
             "plane_offset": float(c),
             "support_inliers": int(ransac.inlier_mask_.sum()),
             "support_ratio": float(ransac.inlier_mask_.mean()),
+            "adaptive_threshold_m": float(threshold),
+            "p_high_m": float(p_high),
             "food_z_min": float(np.min(z[food])),
             "food_z_median": float(np.median(z[food])),
             "food_z_max": float(np.max(z[food])),
-            "surface_ray_distance_min": float(np.min(z[food])),
-            "surface_ray_distance_median": float(np.median(z[food])),
-            "surface_ray_distance_max": float(np.max(z[food])),
-            "plane_ray_distance_min": float(np.min(plane_z[food])),
-            "plane_ray_distance_median": float(np.median(plane_z[food])),
-            "plane_ray_distance_max": float(np.max(plane_z[food])),
             "height_min": float(np.min(height[food])),
             "height_median": float(np.median(height[food])),
             "height_max": float(np.max(height[food])),
