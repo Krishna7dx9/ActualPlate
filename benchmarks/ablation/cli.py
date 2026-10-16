@@ -97,7 +97,7 @@ def _resolve_endpoint() -> str:
 def _resolve_predictions_fn(name: str):
     if name == "none":
         return predictions_none
-    if name == "metafood3d":
+    if name in ("metafood3d", "remote"):
         return predictions_metafood3d
     raise ValueError(f"unknown predictions value: {name}")
 
