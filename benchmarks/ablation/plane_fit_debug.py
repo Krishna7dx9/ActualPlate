@@ -70,7 +70,7 @@ def main():
     print("PIPELINE VOLUME (server-side, full resolution)")
     print("=" * 72)
     for k in ("label", "score", "mask_pixels", "volume_cm3",
-              "volume_status", "support_inliers", "support_ratio",
+              "volume_status", "volume_error", "support_inliers", "support_ratio",
               "valid_volume_pixels"):
         print(f"  {k:24s} {food.get(k)}")
 
