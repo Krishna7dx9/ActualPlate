@@ -18,18 +18,20 @@ Response format:
 
 The default response includes only summary fields. If the request
 sets `include_arrays=true`, the response additionally includes
-base64-encoded numpy arrays:
+base64-encoded numpy arrays, downsampled to a 512-pixel max side:
 
-    depth_map_b64    one per request, (H, W) float32, max side 512
-    mask_b64         one per food, (H, W) uint8, max side 512
+    depth_map_b64    one per request, (H, W) float32
+    mask_b64         one per food, (H, W) uint8
 
-The arrays are downsampled to a 512-pixel maximum side before
-encoding. Cloudflare free tunnels drop the connection on
-multi-megabyte response bodies; downsampling bounds the size
-while preserving the spatial information needed for diagnostics.
+Downsampling bounds the response size; Cloudflare free tunnels
+drop the connection on multi-megabyte bodies.
 
-The default backend pipeline ignores these arrays; they exist
-only to enable offline diagnosis.
+If the request sets `debug=true`, each food record includes a
+`_debug` sub-dict from estimate_volume_cm3: plane normal, plane
+offset, support inliers, per-stage ray distances, and the height
+distribution. This runs on the full-resolution depth map and
+mask on the server, so the numbers reflect the pipeline's actual
+geometry.
 """
 
 from __future__ import annotations
@@ -54,8 +56,6 @@ from vision_service.inference.volume import estimate_volume_cm3
 VISION_API_TOKEN = os.environ.get("VISION_API_TOKEN")
 
 # Maximum side length for arrays returned when include_arrays=true.
-# Cloudflare free tunnels drop large responses; 512 keeps the
-# response well under a megabyte.
 MAX_ARRAY_SIDE = 512
 
 app = FastAPI(
@@ -72,25 +72,12 @@ def _check_auth(x_api_token: str | None) -> None:
 
 
 def _encode_npz(array: np.ndarray) -> str:
-    """
-    Compress and base64-encode a numpy array.
-
-    Uses np.savez_compressed for compactness. A client decodes with:
-
-        raw = base64.b64decode(s)
-        arr = np.load(io.BytesIO(raw))["arr"]
-    """
     buf = io.BytesIO()
     np.savez_compressed(buf, arr=array)
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
 def _downsample_u8(arr: np.ndarray, max_side: int = MAX_ARRAY_SIDE) -> np.ndarray:
-    """
-    Downsample a 2D uint8 array so its longest side is at most
-    max_side. Nearest-neighbor preserves class boundaries for
-    masks. Returns unchanged if already small enough.
-    """
     h, w = arr.shape[:2]
     longest = max(h, w)
     if longest <= max_side:
@@ -102,11 +89,6 @@ def _downsample_u8(arr: np.ndarray, max_side: int = MAX_ARRAY_SIDE) -> np.ndarra
 
 
 def _downsample_f32(arr: np.ndarray, max_side: int = MAX_ARRAY_SIDE) -> np.ndarray:
-    """
-    Downsample a 2D float32 depth map so its longest side is at
-    most max_side. Area interpolation averages depth values;
-    valid for smooth depth maps.
-    """
     h, w = arr.shape[:2]
     longest = max(h, w)
     if longest <= max_side:
@@ -131,6 +113,7 @@ async def detect(
     file: UploadFile = File(...),
     labels: str = Form(...),
     include_arrays: bool = Form(False),
+    debug: bool = Form(False),
     focal_px: float | None = Form(None),
     x_api_token: str | None = Header(default=None),
 ) -> JSONResponse:
@@ -181,7 +164,12 @@ async def detect(
                     depth_map=result.depth_map,
                     mask=mask,
                     focal_length_px=result.focal_length_px,
+                    return_debug=debug,
                 )
+                if debug:
+                    dbg = volume_result.pop("_debug", None)
+                    if dbg is not None:
+                        food_record["_debug"] = dbg
                 food_record.update(volume_result)
                 food_record["volume_status"] = "valid"
 
