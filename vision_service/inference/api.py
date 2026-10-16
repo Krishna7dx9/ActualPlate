@@ -20,12 +20,16 @@ The default response includes only summary fields. If the request
 sets `include_arrays=true`, the response additionally includes
 base64-encoded numpy arrays:
 
-    depth_map_b64    one per request, (H, W) float32
-    mask_b64         one per food, (H, W) uint8
+    depth_map_b64    one per request, (H, W) float32, max side 512
+    mask_b64         one per food, (H, W) uint8, max side 512
 
-These are consumed by the ablation harness to run variants B and
-C locally on the laptop. The default backend pipeline ignores
-them; they exist only to enable offline diagnosis.
+The arrays are downsampled to a 512-pixel maximum side before
+encoding. Cloudflare free tunnels drop the connection on
+multi-megabyte response bodies; downsampling bounds the size
+while preserving the spatial information needed for diagnostics.
+
+The default backend pipeline ignores these arrays; they exist
+only to enable offline diagnosis.
 """
 
 from __future__ import annotations
@@ -37,6 +41,7 @@ import shutil
 import tempfile
 import uuid
 
+import cv2
 import numpy as np
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
@@ -47,6 +52,11 @@ from vision_service.inference.volume import estimate_volume_cm3
 
 
 VISION_API_TOKEN = os.environ.get("VISION_API_TOKEN")
+
+# Maximum side length for arrays returned when include_arrays=true.
+# Cloudflare free tunnels drop large responses; 512 keeps the
+# response well under a megabyte.
+MAX_ARRAY_SIDE = 512
 
 app = FastAPI(
     title="ActualPlate Vision API",
@@ -65,8 +75,7 @@ def _encode_npz(array: np.ndarray) -> str:
     """
     Compress and base64-encode a numpy array.
 
-    Uses np.savez_compressed for compactness. The result is a
-    single string that a client can decode with:
+    Uses np.savez_compressed for compactness. A client decodes with:
 
         raw = base64.b64decode(s)
         arr = np.load(io.BytesIO(raw))["arr"]
@@ -74,6 +83,38 @@ def _encode_npz(array: np.ndarray) -> str:
     buf = io.BytesIO()
     np.savez_compressed(buf, arr=array)
     return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def _downsample_u8(arr: np.ndarray, max_side: int = MAX_ARRAY_SIDE) -> np.ndarray:
+    """
+    Downsample a 2D uint8 array so its longest side is at most
+    max_side. Nearest-neighbor preserves class boundaries for
+    masks. Returns unchanged if already small enough.
+    """
+    h, w = arr.shape[:2]
+    longest = max(h, w)
+    if longest <= max_side:
+        return arr
+    scale = max_side / float(longest)
+    new_w = max(1, int(round(w * scale)))
+    new_h = max(1, int(round(h * scale)))
+    return cv2.resize(arr, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
+
+
+def _downsample_f32(arr: np.ndarray, max_side: int = MAX_ARRAY_SIDE) -> np.ndarray:
+    """
+    Downsample a 2D float32 depth map so its longest side is at
+    most max_side. Area interpolation averages depth values;
+    valid for smooth depth maps.
+    """
+    h, w = arr.shape[:2]
+    longest = max(h, w)
+    if longest <= max_side:
+        return arr
+    scale = max_side / float(longest)
+    new_w = max(1, int(round(w * scale)))
+    new_h = max(1, int(round(h * scale)))
+    return cv2.resize(arr, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
 
 @app.get("/health")
@@ -149,11 +190,10 @@ async def detect(
                 food_record["volume_status"] = "unreliable"
                 food_record["volume_error"] = str(exc)
 
-            # Optional raw mask for offline ablation.
             if include_arrays:
-                food_record["mask_b64"] = _encode_npz(
-                    np.asarray(mask, dtype=np.uint8)
-                )
+                m = np.asarray(mask, dtype=np.uint8)
+                m = _downsample_u8(m, MAX_ARRAY_SIDE)
+                food_record["mask_b64"] = _encode_npz(m)
 
             foods.append(food_record)
 
@@ -166,11 +206,10 @@ async def detect(
             "request_id": request_id,
         }
 
-        # Optional raw depth map for offline ablation.
         if include_arrays:
-            response["depth_map_b64"] = _encode_npz(
-                np.asarray(result.depth_map, dtype=np.float32)
-            )
+            dm = np.asarray(result.depth_map, dtype=np.float32)
+            dm = _downsample_f32(dm, MAX_ARRAY_SIDE)
+            response["depth_map_b64"] = _encode_npz(dm)
 
         return JSONResponse(content=response)
 
