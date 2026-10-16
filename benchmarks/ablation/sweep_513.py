@@ -10,6 +10,7 @@ Network-err  = request raised before response
 Usage: python -m benchmarks.ablation.sweep_513
 """
 import os
+import time
 from pathlib import Path
 import numpy as np
 import requests
@@ -43,6 +44,10 @@ def main():
     h_maxes = []
 
     for i, jpg in enumerate(files, 1):
+        t0 = time.time()
+        line_status = "?"
+        line_vol = "-"
+
         try:
             r = requests.post(
                 url,
@@ -50,35 +55,46 @@ def main():
                 data={"labels": LABEL, "debug": "true"},
                 timeout=180,
             )
-        except Exception:
+        except Exception as exc:
             network_err += 1
+            print(f"[{i:>3}/{len(files)}] {jpg.name:<28} "
+                  f"NETERR  {str(exc)[:30]}", flush=True)
             continue
 
         if r.status_code != 200:
             non_200 += 1
+            print(f"[{i:>3}/{len(files)}] {jpg.name:<28} "
+                  f"HTTP{r.status_code}", flush=True)
             continue
 
         b = r.json()
         foods = b.get("foods") or []
         if not foods:
             no_detection += 1
+            print(f"[{i:>3}/{len(files)}] {jpg.name:<28} "
+                  f"no-det  ({time.time()-t0:.1f}s)", flush=True)
             continue
 
         f = foods[0]
         vol = f.get("volume_cm3")
         if vol is None:
             unreliable += 1
+            err = (f.get("volume_error") or "")[:40]
+            print(f"[{i:>3}/{len(files)}] {jpg.name:<28} "
+                  f"unrel   {err}", flush=True)
             continue
 
         success += 1
         volumes.append(float(vol))
         d = f.get("_debug") or {}
+        h_mm = "-"
         if d.get("height_max") is not None:
-            h_maxes.append(float(d["height_max"]) * 1000.0)
-
-        if i % 50 == 0:
-            print(f"  ... {i}/{len(files)}  ok={success} unrel={unreliable} "
-                  f"nodet={no_detection} non200={non_200} neterr={network_err}")
+            h_mm_f = float(d["height_max"]) * 1000.0
+            h_maxes.append(h_mm_f)
+            h_mm = f"{h_mm_f:.1f}"
+        print(f"[{i:>3}/{len(files)}] {jpg.name:<28} "
+              f"ok  vol={float(vol):>7.1f}cm3  h_max={h_mm:>6}mm  "
+              f"({time.time()-t0:.1f}s)", flush=True)
 
     n = len(files)
     print()
