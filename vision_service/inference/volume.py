@@ -343,7 +343,7 @@ def estimate_volume_cm3_v2(
     adaptive_percentile: float = 90.0,
     adaptive_factor: float = 0.35,
     min_threshold_m: float = 0.003,
-    height_cap_percentile: float = 95.0,
+    height_cap_percentile: float = 99.0,
     return_debug: bool = False,
 ) -> dict:
     """
