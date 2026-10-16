@@ -341,15 +341,8 @@ def estimate_volume_cm3_v2(
     mask: np.ndarray,
     focal_length_px: float,
     height_threshold_m: float = 0.020,
+    return_debug: bool = False,
 ) -> dict:
-    """
-    Volume from the mask itself, no outside plane needed.
-
-    The mask is assumed to cover the food AND the plate. Fit a
-    plane to the mask pixels; the dominant surface is the plate.
-    Pixels whose height above that plane exceeds height_threshold_m
-    are food. Volume = sum over food pixels of height * footprint.
-    """
     depth = np.asarray(depth_map, dtype=np.float32)
     mask = np.asarray(mask, dtype=bool)
     h, w = depth.shape
@@ -364,21 +357,17 @@ def estimate_volume_cm3_v2(
     x = (fx - cx) * z / focal_length_px
     y = (fy - cy) * z / focal_length_px
 
-    # RANSAC plane fit: z = a*x + b*y + c
-    try:
-        from sklearn.linear_model import RANSACRegressor, LinearRegression
-        ransac = RANSACRegressor(
-            LinearRegression(),
-            residual_threshold=0.010,
-            random_state=42,
-            min_samples=10,
-        )
-        ransac.fit(np.column_stack([x, y]), z)
-        a = float(ransac.estimator_.coef_[0])
-        b = float(ransac.estimator_.coef_[1])
-        c = float(ransac.estimator_.intercept_)
-    except Exception as exc:
-        raise ValueError(f"Plane fit failed: {exc}")
+    from sklearn.linear_model import RANSACRegressor, LinearRegression
+    ransac = RANSACRegressor(
+        LinearRegression(),
+        residual_threshold=0.010,
+        random_state=42,
+        min_samples=10,
+    )
+    ransac.fit(np.column_stack([x, y]), z)
+    a = float(ransac.estimator_.coef_[0])
+    b = float(ransac.estimator_.coef_[1])
+    c = float(ransac.estimator_.intercept_)
 
     plane_z = a * x + b * y + c
     height = plane_z - z
@@ -391,9 +380,33 @@ def estimate_volume_cm3_v2(
     volume_m3 = float(np.sum(height[food] * pixel_area_m2[food]))
     volume_cm3 = volume_m3 * 1e6
 
-    return {
+    result = {
         "volume_cm3": volume_cm3,
         "support_inliers": int(ransac.inlier_mask_.sum()),
         "support_ratio": float(ransac.inlier_mask_.mean()),
         "valid_volume_pixels": int(food.sum()),
     }
+
+    if return_debug:
+        result["_debug"] = {
+            "plane_normal": [a, b, -1.0],
+            "plane_offset": float(c),
+            "support_inliers": int(ransac.inlier_mask_.sum()),
+            "support_ratio": float(ransac.inlier_mask_.mean()),
+            "food_z_min": float(np.min(z[food])),
+            "food_z_median": float(np.median(z[food])),
+            "food_z_max": float(np.max(z[food])),
+            "surface_ray_distance_min": float(np.min(z[food])),
+            "surface_ray_distance_median": float(np.median(z[food])),
+            "surface_ray_distance_max": float(np.max(z[food])),
+            "plane_ray_distance_min": float(np.min(plane_z[food])),
+            "plane_ray_distance_median": float(np.median(plane_z[food])),
+            "plane_ray_distance_max": float(np.max(plane_z[food])),
+            "height_min": float(np.min(height[food])),
+            "height_median": float(np.median(height[food])),
+            "height_max": float(np.max(height[food])),
+            "valid_volume_pixels": int(food.sum()),
+            "volume_m3": float(volume_m3),
+        }
+
+    return result
