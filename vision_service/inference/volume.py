@@ -343,16 +343,19 @@ def estimate_volume_cm3_v2(
     adaptive_percentile: float = 90.0,
     adaptive_factor: float = 0.35,
     min_threshold_m: float = 0.003,
+    height_cap_percentile: float = 95.0,
     return_debug: bool = False,
 ) -> dict:
     """
-    Volume from the mask itself, with an adaptive height threshold.
+    Volume from the mask itself, adaptive threshold + robust aggregation.
 
-    Fits a plane to the mask pixels (dominant surface = plate). The
-    food threshold is data-driven: adaptive_factor times the
-    adaptive_percentile of the positive height distribution, floored
-    at min_threshold_m. A fixed 2 cm threshold rejected real foods
-    whose Depth Pro height bump was 5-15 mm (513-photo sweep).
+    Adaptive threshold (phase 1) picks the food pixels. Robust
+    aggregation (phase 2) caps per-pixel heights at a high percentile
+    before summing, so a handful of mask-edge or depth-noise pixels
+    cannot inflate the volume. On the 513-photo sweep the raw sum
+    spanned 54-654 cm^3 for the same object; the cap narrows that
+    range by suppressing outliers rather than by discarding the
+    whole measurement.
     """
     depth = np.asarray(depth_map, dtype=np.float32)
     mask = np.asarray(mask, dtype=bool)
@@ -404,8 +407,12 @@ def estimate_volume_cm3_v2(
             f"{p_high*1000:.1f}mm)"
         )
 
-    pixel_area_m2 = (z ** 2) / (focal_length_px ** 2)
-    volume_m3 = float(np.sum(height[food] * pixel_area_m2[food]))
+    food_h = height[food]
+    h_cap = float(np.percentile(food_h, height_cap_percentile))
+    h_clipped = np.minimum(food_h, h_cap)
+
+    pixel_area_m2 = (z[food] ** 2) / (focal_length_px ** 2)
+    volume_m3 = float(np.sum(h_clipped * pixel_area_m2))
     volume_cm3 = volume_m3 * 1e6
 
     result = {
@@ -423,12 +430,14 @@ def estimate_volume_cm3_v2(
             "support_ratio": float(ransac.inlier_mask_.mean()),
             "adaptive_threshold_m": float(threshold),
             "p_high_m": float(p_high),
+            "height_cap_m": float(h_cap),
             "food_z_min": float(np.min(z[food])),
             "food_z_median": float(np.median(z[food])),
             "food_z_max": float(np.max(z[food])),
-            "height_min": float(np.min(height[food])),
-            "height_median": float(np.median(height[food])),
-            "height_max": float(np.max(height[food])),
+            "height_min": float(np.min(food_h)),
+            "height_median": float(np.median(food_h)),
+            "height_max": float(np.max(food_h)),
+            "height_p95": float(np.percentile(food_h, 95)),
             "valid_volume_pixels": int(food.sum()),
             "volume_m3": float(volume_m3),
         }
