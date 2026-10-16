@@ -148,8 +148,19 @@ def estimate_volume_cm3(
 
     # --- Supporting-plane points: background pixels away from the food.
 
+    # Fit the plane to pixels adjacent to the mask, not the whole
+    # image. The whole-image sample includes distant background
+    # (measured: 34 cm depth spread on real photos), which tilts
+    # the plane. Local ring is the plate under the food.
     expanded_mask = binary_dilation(mask, iterations=8)
-    valid_background = np.isfinite(depth) & (depth > 0) & ~expanded_mask
+    local_ring = binary_dilation(mask, iterations=60) & ~expanded_mask
+    valid_background = (
+        np.isfinite(depth) & (depth > 0) & local_ring
+    )
+    if int(valid_background.sum()) < 200:
+        valid_background = (
+            np.isfinite(depth) & (depth > 0) & ~expanded_mask
+        )
 
     by, bx = np.where(valid_background)
 
@@ -195,7 +206,7 @@ def estimate_volume_cm3(
 
         normal, offset = plane
         distances = np.abs(background_points @ normal - offset)
-        count = int(np.count_nonzero(distances <= 0.015))
+        count = int(np.count_nonzero(distances <= 0.005))
 
         if count > best_count:
             best_count = count
