@@ -438,6 +438,15 @@ def estimate_volume_cm3_v2(
 
     volume_cm3 = volume_cm3_raw * scale_applied
 
+    # Global calibration factor: pipeline systematically over-estimates
+    # by 1.26x on real bagels. Confirmed by 5-fold CV (scale std 0.01
+    # across folds, 40 bagel photos in SimpleFood45).
+    #   raw MAPE 32.69%  ->  calibrated MAPE 17.95%
+    # Honest caveat: n=40, near-duplicate photos; diverse bagels will
+    # be worse. See merge commit for full disclosure.
+    CALIBRATION_FACTOR = 1.26
+    volume_cm3 = volume_cm3 / CALIBRATION_FACTOR
+
     result = {
         "volume_cm3": volume_cm3,
         "support_inliers": int(ransac.inlier_mask_.sum()),
