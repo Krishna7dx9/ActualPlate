@@ -471,6 +471,7 @@ def estimate_volume_cm3_v2(
 
     return result
 
+
 def estimate_volume_cm3_v3(
     depth_map: np.ndarray,
     mask: np.ndarray,
@@ -485,27 +486,7 @@ def estimate_volume_cm3_v3(
     column_grid_px: int = 256,
     return_debug: bool = False,
 ) -> dict:
-    """
-    Volume via vertical-column integration (phase 3).
-
-    Replaces the ray-to-plane integration of v2 with a top-down
-    projection. The v2 formula over-counts on 3D shapes because a
-    ray exits through a side of the object before reaching the plate
-    plane (measured 1.51x on a cube, 2.36x on an almond mesh, both
-    resolution-independent). Column integration sums per-column
-    height * footprint, which has no such over-count.
-
-    Method:
-        1. Fit supporting plane (RANSAC on mask pixels, same as v2).
-        2. Compute per-pixel height above plane.
-        3. Adaptive threshold and 99th-percentile cap (same as v2).
-        4. Project food pixels to a top-down grid of column_grid_px
-           across the image's long dimension.
-        5. For each column, take the max height (top of column).
-        6. Sum column_max_height * column_footprint_m2 over all
-           non-empty columns.
-        7. Multiply by the class-prior scale correction (same as v2).
-    """
+    """Vertical-column volume integration (phase 3)."""
     depth = np.asarray(depth_map, dtype=np.float32)
     mask = np.asarray(mask, dtype=bool)
     h, w = depth.shape
@@ -537,17 +518,43 @@ def estimate_volume_cm3_v3(
 
     positive = height[height > 0]
     if len(positive) < 100:
-        raise ValueError(f"Not enough positive-height pixels (n={len(positive)})")
+        raise ValueError(
+            f"Not enough positive-height pixels (n={len(positive)})"
+        )
 
     p_high = float(np.percentile(positive, adaptive_percentile))
     threshold = max(min_threshold_m, p_high * adaptive_factor)
-    if p_high < min_threshoros((grid_h, grid_w), dtype=np.float32)
+    if p_high < min_threshold_m:
+        raise ValueError(
+            f"Depth did not resolve food (p{adaptive_percentile:.0f}="
+            f"{p_high*1000:.1f}mm < {min_threshold_m*1000:.1f}mm)"
+        )
+
+    food = height > threshold
+    n_food = int(food.sum())
+    if n_food < 50:
+        raise ValueError(
+            f"No food pixels above adaptive plate "
+            f"(thr={threshold*1000:.1f}mm p{adaptive_percentile:.0f}="
+            f"{p_high*1000:.1f}mm)"
+        )
+
+    food_h = height[food]
+    h_cap = float(np.percentile(food_h, height_cap_percentile))
+    food_h = np.minimum(food_h, h_cap)
+
+    max_dim = max(w, h)
+    cell = max(1, int(max_dim / column_grid_px))
+    gy = (fy[food] // cell).astype(np.int64)
+    gx = (fx[food] // cell).astype(np.int64)
+    grid_h = int(h // cell) + 1
+    grid_w = int(w // cell) + 1
+
+    column_max_h = np.zeros((grid_h, grid_w), dtype=np.float32)
     np.maximum.at(column_max_h, (gy, gx), food_h.astype(np.float32))
 
-    # Footprint of one cell at the mask's median depth.
     z_median = float(np.median(z[food]))
-    cell_px = float(cell)
-    cell_footprint_m2 = (cell_px * z_median / focal_length_px) ** 2
+    cell_footprint_m2 = (float(cell) * z_median / focal_length_px) ** 2
 
     n_columns = int((column_max_h > 0).sum())
     volume_m3_raw = float(np.sum(column_max_h) * cell_footprint_m2)
@@ -589,4 +596,3 @@ def estimate_volume_cm3_v3(
         }
 
     return result
-
