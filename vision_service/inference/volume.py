@@ -601,3 +601,113 @@ def estimate_volume_cm3_v3(
         }
 
     return result
+
+def estimate_volume_cm3_v4(
+    depth_map: np.ndarray,
+    mask: np.ndarray,
+    focal_length_px: float,
+    label: str = "",
+    ring_dilation_px: int = 30,
+    adaptive_percentile: float = 90.0,
+    adaptive_factor: float = 0.35,
+    min_threshold_m: float = 0.003,
+    column_grid_px: int = 256,
+    return_debug: bool = False,
+) -> dict:
+    """
+    Exact column integration.
+    Area uses plane_z (plate depth), not food depth.
+    """
+    from scipy.ndimage import binary_dilation, median_filter
+    from sklearn.linear_model import RANSACRegressor, LinearRegression
+    
+    depth = np.asarray(depth_map, dtype=np.float32)
+    mask = np.asarray(mask, dtype=bool)
+    h, w = depth.shape
+    cx = (w - 1) / 2.0
+    cy = (h - 1) / 2.0
+
+    if not np.any(mask):
+        raise ValueError("Mask is empty")
+
+    depth = median_filter(depth, size=5)
+
+    dilated = binary_dilation(mask, iterations=ring_dilation_px)
+    ring = dilated & ~mask & np.isfinite(depth) & (depth > 0)
+    if ring.sum() < 100:
+        ring = ~mask & np.isfinite(depth) & (depth > 0)
+
+    ry, rx = np.where(ring)
+    if len(rx) < 100:
+        raise ValueError("Not enough background ring pixels")
+
+    rz = depth[ry, rx]
+    valid_ring = np.isfinite(rz) & (rz > 0)
+    ry, rx, rz = ry[valid_ring], rx[valid_ring], rz[valid_ring]
+    
+    rx_3d = (rx - cx) * rz / focal_length_px
+    ry_3d = (ry - cy) * rz / focal_length_px
+    ring_pts = np.column_stack([rx_3d, ry_3d, rz])
+
+    ransac = RANSACRegressor(LinearRegression(), residual_threshold=0.010, random_state=42, min_samples=10)
+    ransac.fit(ring_pts[:, :2], ring_pts[:, 2])
+    a = float(ransac.estimator_.coef_[0])
+    b = float(ransac.estimator_.coef_[1])
+    c = float(ransac.estimator_.intercept_)
+
+    fy, fx = np.where(mask & np.isfinite(depth) & (depth > 0))
+    z = depth[fy, fx]
+    x = (fx - cx) * z / focal_length_px
+    y = (fy - cy) * z / focal_length_px
+
+    plane_z = a * x + b * y + c
+    height = plane_z - z
+
+    positive = height[height > 0]
+    if len(positive) < 100:
+        raise ValueError(f"Not enough positive-height pixels (n={len(positive)})")
+
+    p_high = float(np.percentile(positive, adaptive_percentile))
+    threshold = max(min_threshold_m, p_high * adaptive_factor)
+
+    if p_high < min_threshold_m:
+        raise ValueError(f"Depth did not resolve food")
+
+    food = height > threshold
+    n_food = int(food.sum())
+    if n_food < 50:
+        raise ValueError("No food pixels above plate")
+
+    food_h = height[food]
+    food_plane_z = plane_z[food]
+
+    max_dim = max(w, h)
+    cell = max(1, int(max_dim / column_grid_px))
+    gy = (fy[food] // cell).astype(np.int64)
+    gx = (fx[food] // cell).astype(np.int64)
+    grid_h, grid_w = int(h // cell) + 1, int(w // cell) + 1
+
+    column_h = np.zeros((grid_h, grid_w), dtype=np.float32)
+    np.maximum.at(column_h, (gy, gx), food_h)
+
+    # Use plane_z for area (the correct footprint on the plate)
+    pixel_area_m2 = (food_plane_z / focal_length_px) ** 2
+    cell_areas = np.zeros((grid_h, grid_w), dtype=np.float32)
+    np.add.at(cell_areas, (gy, gx), pixel_area_m2)
+
+    volume_m3 = float(np.sum(column_h * cell_areas))
+    volume_cm3 = volume_m3 * 1e6
+
+    result = {
+        "volume_cm3": volume_cm3,
+        "support_inliers": int(ransac.inlier_mask_.sum()),
+        "support_ratio": float(ransac.inlier_mask_.mean()),
+        "valid_volume_pixels": n_food,
+    }
+    if return_debug:
+        result["_debug"] = {
+            "plane_normal": [a, b, -1.0],
+            "plane_offset": float(c),
+            "volume_cm3_raw": float(volume_cm3),
+        }
+    return result
