@@ -550,14 +550,24 @@ def estimate_volume_cm3_v3(
     grid_h = int(h // cell) + 1
     grid_w = int(w // cell) + 1
 
-    column_max_h = np.zeros((grid_h, grid_w), dtype=np.float32)
-    np.maximum.at(column_max_h, (gy, gx), food_h.astype(np.float32))
+    # Column-p80, not column-max. Depth Pro has 5-10mm per-pixel
+    # noise on real photos. Column-max picks the noisiest outlier
+    # in each cell, which inflated v3 median by 17% vs v2 on the
+    # 120-photo sweep (319.9 vs 272.7) even though v3 is correct
+    # on synthetic cubes. p80 filters per-pixel noise while
+    # preserving the dome's shape.
+    cell_lists = {}
+    for gyy, gxx, hh in zip(gy, gx, food_h):
+        cell_lists.setdefault((gyy, gxx), []).append(float(hh))
+    column_h = np.zeros((grid_h, grid_w), dtype=np.float32)
+    for (gyy, gxx), vals in cell_lists.items():
+        column_h[gyy, gxx] = float(np.percentile(vals, 80))
 
     z_median = float(np.median(z[food]))
     cell_footprint_m2 = (float(cell) * z_median / focal_length_px) ** 2
 
-    n_columns = int((column_max_h > 0).sum())
-    volume_m3_raw = float(np.sum(column_max_h) * cell_footprint_m2)
+    n_columns = int((column_h > 0).sum())
+    volume_m3_raw = float(np.sum(column_h) * cell_footprint_m2)
     volume_cm3_raw = volume_m3_raw * 1e6
 
     from vision_service.inference.food_priors import get_prior
