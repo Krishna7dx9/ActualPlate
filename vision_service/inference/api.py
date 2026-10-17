@@ -164,6 +164,7 @@ async def detect(
                     depth_map=result.depth_map,
                     mask=mask,
                     focal_length_px=result.focal_length_px,
+                    label=food.label,
                     return_debug=debug,
                 )
                 if debug:

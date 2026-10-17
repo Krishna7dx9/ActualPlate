@@ -340,22 +340,28 @@ def estimate_volume_cm3_v2(
     depth_map: np.ndarray,
     mask: np.ndarray,
     focal_length_px: float,
+    label: str = "",
     adaptive_percentile: float = 90.0,
     adaptive_factor: float = 0.35,
     min_threshold_m: float = 0.003,
-    height_cap_percentile: float = 95.0,
+    height_cap_percentile: float = 99.0,
+    scale_min: float = 0.5,
+    scale_max: float = 5.0,
     return_debug: bool = False,
 ) -> dict:
     """
-    Volume from the mask itself, adaptive threshold + robust aggregation.
+    Volume from the mask itself, with class-prior scale correction.
 
-    Adaptive threshold (phase 1) picks the food pixels. Robust
-    aggregation (phase 2) caps per-pixel heights at a high percentile
-    before summing, so a handful of mask-edge or depth-noise pixels
-    cannot inflate the volume. On the 513-photo sweep the raw sum
-    spanned 54-654 cm^3 for the same object; the cap narrows that
-    range by suppressing outliers rather than by discarding the
-    whole measurement.
+    Phase 1: adaptive threshold picks the food pixels (mask covers
+    plate+food; plane is fit to the mask's dominant surface).
+    Phase 2: cap heights at the 99th percentile to clip per-pixel noise.
+    Phase 2b: Depth Pro under-reports the food-dome height by 2-5x on
+    many photos (measured: hcap 8-12mm where real bagel is ~40mm).
+    Correct by scaling volume by prior_height / measured_height.
+    Bounded to [scale_min, scale_max] so a wrong label or a
+    catastrophically failed depth cannot cause runaway correction.
+
+    See vision_service.inference.food_priors for the prior table.
     """
     depth = np.asarray(depth_map, dtype=np.float32)
     mask = np.asarray(mask, dtype=bool)
@@ -412,8 +418,25 @@ def estimate_volume_cm3_v2(
     h_clipped = np.minimum(food_h, h_cap)
 
     pixel_area_m2 = (z[food] ** 2) / (focal_length_px ** 2)
-    volume_m3 = float(np.sum(h_clipped * pixel_area_m2))
-    volume_cm3 = volume_m3 * 1e6
+    volume_m3_raw = float(np.sum(h_clipped * pixel_area_m2))
+    volume_cm3_raw = volume_m3_raw * 1e6
+
+    from vision_service.inference.food_priors import get_prior
+    prior = get_prior(label)
+    prior_h_mm = float(prior["height_mm"])
+    h_cap_mm = h_cap * 1000.0
+
+    if h_cap_mm > 0:
+        scale = prior_h_mm / h_cap_mm
+    else:
+        scale = 1.0
+
+    if scale_min <= scale <= scale_max:
+        scale_applied = scale
+    else:
+        scale_applied = 1.0
+
+    volume_cm3 = volume_cm3_raw * scale_applied
 
     result = {
         "volume_cm3": volume_cm3,
@@ -431,6 +454,11 @@ def estimate_volume_cm3_v2(
             "adaptive_threshold_m": float(threshold),
             "p_high_m": float(p_high),
             "height_cap_m": float(h_cap),
+            "prior_height_mm": float(prior_h_mm),
+            "scale_computed": float(scale),
+            "scale_applied": float(scale_applied),
+            "volume_cm3_raw": float(volume_cm3_raw),
+            "volume_cm3_corrected": float(volume_cm3),
             "food_z_min": float(np.min(z[food])),
             "food_z_median": float(np.median(z[food])),
             "food_z_max": float(np.max(z[food])),
@@ -439,7 +467,6 @@ def estimate_volume_cm3_v2(
             "height_max": float(np.max(food_h)),
             "height_p95": float(np.percentile(food_h, 95)),
             "valid_volume_pixels": int(food.sum()),
-            "volume_m3": float(volume_m3),
         }
 
     return result
