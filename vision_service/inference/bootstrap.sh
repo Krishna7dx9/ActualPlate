@@ -59,6 +59,8 @@ echo
 # ------------------------------------------------------------
 
 echo "[1/5] Installing inference service dependencies."
+pip install -U setuptools
+
 echo "      This may take several minutes on a cold host."
 echo
 
