@@ -463,11 +463,7 @@ def estimate_volume_cm3_v2(
             "adaptive_threshold_m": float(threshold),
             "p_high_m": float(p_high),
             "height_cap_m": float(h_cap),
-            "prior_height_mm": float(prior_h_mm),
-            "scale_computed": float(scale),
-            "scale_applied": float(scale_applied),
             "volume_cm3_raw": float(volume_cm3_raw),
-            "volume_cm3_corrected": float(volume_cm3),
             "food_z_min": float(np.min(z[food])),
             "food_z_median": float(np.median(z[food])),
             "food_z_max": float(np.max(z[food])),
@@ -578,14 +574,7 @@ def estimate_volume_cm3_v3(
     n_columns = int((column_h > 0).sum())
     volume_m3_raw = float(np.sum(column_h) * cell_footprint_m2)
     volume_cm3_raw = volume_m3_raw * 1e6
-
-    from vision_service.inference.food_priors import get_prior
-    prior = get_prior(label)
-    prior_h_mm = float(prior["height_mm"])
-    h_cap_mm = h_cap * 1000.0
-    scale = prior_h_mm / h_cap_mm if h_cap_mm > 0 else 1.0
-    scale_applied = scale if scale_min <= scale <= scale_max else 1.0
-    volume_cm3 = volume_cm3_raw * scale_applied
+    volume_cm3 = volume_cm3_raw
 
     result = {
         "volume_cm3": volume_cm3,
@@ -603,9 +592,6 @@ def estimate_volume_cm3_v3(
             "adaptive_threshold_m": float(threshold),
             "p_high_m": float(p_high),
             "height_cap_m": float(h_cap),
-            "prior_height_mm": float(prior_h_mm),
-            "scale_computed": float(scale),
-            "scale_applied": float(scale_applied),
             "volume_cm3_raw": float(volume_cm3_raw),
             "volume_cm3_corrected": float(volume_cm3),
             "n_columns": n_columns,
