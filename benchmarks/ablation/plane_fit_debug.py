@@ -87,11 +87,12 @@ def main():
     print(f"  plane_offset             {dbg.get('plane_offset'):.4f} m")
     print(f"  support_inliers          {dbg.get('support_inliers')}")
     print(f"  support_ratio            {dbg.get('support_ratio'):.4f}")
-    print(f"  food_z_median            {dbg.get('food_z_median'):.4f} m")
-    print(f"  surface_ray_dist med     {dbg.get('surface_ray_distance_median'):.4f} m")
-    print(f"  plane_ray_dist med       {dbg.get('plane_ray_distance_median'):.4f} m")
-    print(f"  height_median            {dbg.get('height_median'):.4f} m")
-    print(f"  height_max               {dbg.get('height_max'):.4f} m")
+    for k in sorted(dbg.keys()):
+        v = dbg[k]
+        if isinstance(v, (int, float)):
+            print(f"  {k:<28} {v:.4f}")
+        else:
+            print(f"  {k:<28} {v}")
     print(f"  valid_volume_pixels      {dbg.get('valid_volume_pixels')}")
 
     print()
