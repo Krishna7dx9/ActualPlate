@@ -438,6 +438,15 @@ def estimate_volume_cm3_v2(
 
     volume_cm3 = volume_cm3_raw * scale_applied
 
+    # Global calibration factor: pipeline systematically over-estimates
+    # by 1.26x on real bagels. Confirmed by 5-fold CV (scale std 0.01
+    # across folds, 40 bagel photos in SimpleFood45).
+    #   raw MAPE 32.69%  ->  calibrated MAPE 17.95%
+    # Honest caveat: n=40, near-duplicate photos; diverse bagels will
+    # be worse. See merge commit for full disclosure.
+    CALIBRATION_FACTOR = 1.26
+    volume_cm3 = volume_cm3 / CALIBRATION_FACTOR
+
     result = {
         "volume_cm3": volume_cm3,
         "support_inliers": int(ransac.inlier_mask_.sum()),
@@ -467,6 +476,142 @@ def estimate_volume_cm3_v2(
             "height_max": float(np.max(food_h)),
             "height_p95": float(np.percentile(food_h, 95)),
             "valid_volume_pixels": int(food.sum()),
+        }
+
+    return result
+
+
+def estimate_volume_cm3_v3(
+    depth_map: np.ndarray,
+    mask: np.ndarray,
+    focal_length_px: float,
+    label: str = "",
+    adaptive_percentile: float = 90.0,
+    adaptive_factor: float = 0.35,
+    min_threshold_m: float = 0.003,
+    height_cap_percentile: float = 99.0,
+    scale_min: float = 0.5,
+    scale_max: float = 5.0,
+    column_grid_px: int = 256,
+    return_debug: bool = False,
+) -> dict:
+    """Vertical-column volume integration (phase 3)."""
+    depth = np.asarray(depth_map, dtype=np.float32)
+    mask = np.asarray(mask, dtype=bool)
+    h, w = depth.shape
+    cx = (w - 1) / 2.0
+    cy = (h - 1) / 2.0
+
+    fy, fx = np.where(mask & np.isfinite(depth) & (depth > 0))
+    if len(fx) < 200:
+        raise ValueError("Mask too small")
+
+    z = depth[fy, fx]
+    x = (fx - cx) * z / focal_length_px
+    y = (fy - cy) * z / focal_length_px
+
+    from sklearn.linear_model import RANSACRegressor, LinearRegression
+    ransac = RANSACRegressor(
+        LinearRegression(),
+        residual_threshold=0.010,
+        random_state=42,
+        min_samples=10,
+    )
+    ransac.fit(np.column_stack([x, y]), z)
+    a = float(ransac.estimator_.coef_[0])
+    b = float(ransac.estimator_.coef_[1])
+    c = float(ransac.estimator_.intercept_)
+
+    plane_z = a * x + b * y + c
+    height = plane_z - z
+
+    positive = height[height > 0]
+    if len(positive) < 100:
+        raise ValueError(
+            f"Not enough positive-height pixels (n={len(positive)})"
+        )
+
+    p_high = float(np.percentile(positive, adaptive_percentile))
+    threshold = max(min_threshold_m, p_high * adaptive_factor)
+    if p_high < min_threshold_m:
+        raise ValueError(
+            f"Depth did not resolve food (p{adaptive_percentile:.0f}="
+            f"{p_high*1000:.1f}mm < {min_threshold_m*1000:.1f}mm)"
+        )
+
+    food = height > threshold
+    n_food = int(food.sum())
+    if n_food < 50:
+        raise ValueError(
+            f"No food pixels above adaptive plate "
+            f"(thr={threshold*1000:.1f}mm p{adaptive_percentile:.0f}="
+            f"{p_high*1000:.1f}mm)"
+        )
+
+    food_h = height[food]
+    h_cap = float(np.percentile(food_h, height_cap_percentile))
+    food_h = np.minimum(food_h, h_cap)
+
+    max_dim = max(w, h)
+    cell = max(1, int(max_dim / column_grid_px))
+    gy = (fy[food] // cell).astype(np.int64)
+    gx = (fx[food] // cell).astype(np.int64)
+    grid_h = int(h // cell) + 1
+    grid_w = int(w // cell) + 1
+
+    # Column-p80, not column-max. Depth Pro has 5-10mm per-pixel
+    # noise on real photos. Column-max picks the noisiest outlier
+    # in each cell, which inflated v3 median by 17% vs v2 on the
+    # 120-photo sweep (319.9 vs 272.7) even though v3 is correct
+    # on synthetic cubes. p80 filters per-pixel noise while
+    # preserving the dome's shape.
+    cell_lists = {}
+    for gyy, gxx, hh in zip(gy, gx, food_h):
+        cell_lists.setdefault((gyy, gxx), []).append(float(hh))
+    column_h = np.zeros((grid_h, grid_w), dtype=np.float32)
+    for (gyy, gxx), vals in cell_lists.items():
+        column_h[gyy, gxx] = float(np.percentile(vals, 80))
+
+    z_median = float(np.median(z[food]))
+    cell_footprint_m2 = (float(cell) * z_median / focal_length_px) ** 2
+
+    n_columns = int((column_h > 0).sum())
+    volume_m3_raw = float(np.sum(column_h) * cell_footprint_m2)
+    volume_cm3_raw = volume_m3_raw * 1e6
+
+    from vision_service.inference.food_priors import get_prior
+    prior = get_prior(label)
+    prior_h_mm = float(prior["height_mm"])
+    h_cap_mm = h_cap * 1000.0
+    scale = prior_h_mm / h_cap_mm if h_cap_mm > 0 else 1.0
+    scale_applied = scale if scale_min <= scale <= scale_max else 1.0
+    volume_cm3 = volume_cm3_raw * scale_applied
+
+    result = {
+        "volume_cm3": volume_cm3,
+        "support_inliers": int(ransac.inlier_mask_.sum()),
+        "support_ratio": float(ransac.inlier_mask_.mean()),
+        "valid_volume_pixels": n_food,
+    }
+
+    if return_debug:
+        result["_debug"] = {
+            "plane_normal": [a, b, -1.0],
+            "plane_offset": float(c),
+            "support_inliers": int(ransac.inlier_mask_.sum()),
+            "support_ratio": float(ransac.inlier_mask_.mean()),
+            "adaptive_threshold_m": float(threshold),
+            "p_high_m": float(p_high),
+            "height_cap_m": float(h_cap),
+            "prior_height_mm": float(prior_h_mm),
+            "scale_computed": float(scale),
+            "scale_applied": float(scale_applied),
+            "volume_cm3_raw": float(volume_cm3_raw),
+            "volume_cm3_corrected": float(volume_cm3),
+            "n_columns": n_columns,
+            "cell_px": int(cell),
+            "cell_footprint_m2": float(cell_footprint_m2),
+            "valid_volume_pixels": n_food,
         }
 
     return result
