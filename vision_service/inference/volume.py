@@ -711,3 +711,102 @@ def estimate_volume_cm3_v4(
             "volume_cm3_raw": float(volume_cm3),
         }
     return result
+
+def estimate_volume_cm3_v5(
+    depth_map: np.ndarray,
+    mask: np.ndarray,
+    focal_length_px: float,
+    label: str = "",
+    adaptive_percentile: float = 90.0,
+    adaptive_factor: float = 0.35,
+    min_threshold_m: float = 0.003,
+    column_grid_px: int = 256,
+    return_debug: bool = False,
+) -> dict:
+    """
+    v3 plane fit (inside mask) + v4 exact area (plane_z).
+    Ring-based fit reintroduced the v2 table/shadow bug on real photos.
+    """
+    from sklearn.linear_model import RANSACRegressor, LinearRegression
+
+    depth = np.asarray(depth_map, dtype=np.float32)
+    mask = np.asarray(mask, dtype=bool)
+    h, w = depth.shape
+    cx = (w - 1) / 2.0
+    cy = (h - 1) / 2.0
+
+    if not np.any(mask):
+        raise ValueError("Mask is empty")
+
+    fy, fx = np.where(mask & np.isfinite(depth) & (depth > 0))
+    if len(fx) < 200:
+        raise ValueError("Mask too small")
+
+    z = depth[fy, fx]
+    x = (fx - cx) * z / focal_length_px
+    y = (fy - cy) * z / focal_length_px
+
+    ransac = RANSACRegressor(
+        LinearRegression(), residual_threshold=0.010, random_state=42, min_samples=10
+    )
+    ransac.fit(np.column_stack([x, y]), z)
+    a = float(ransac.estimator_.coef_[0])
+    b = float(ransac.estimator_.coef_[1])
+    c = float(ransac.estimator_.intercept_)
+
+    plane_z = a * x + b * y + c
+    height = plane_z - z
+
+    positive = height[height > 0]
+    if len(positive) < 100:
+        raise ValueError(f"Not enough positive-height pixels (n={len(positive)})")
+
+    p_high = float(np.percentile(positive, adaptive_percentile))
+    threshold = max(min_threshold_m, p_high * adaptive_factor)
+
+    if p_high < min_threshold_m:
+        raise ValueError(f"Depth did not resolve food (p{adaptive_percentile:.0f}={p_high*1000:.1f}mm)")
+
+    food = height > threshold
+    n_food = int(food.sum())
+    if n_food < 50:
+        raise ValueError("No food pixels above plate")
+
+    food_h = height[food]
+    food_plane_z = plane_z[food]
+
+    max_dim = max(w, h)
+    cell = max(1, int(max_dim / column_grid_px))
+    gy = (fy[food] // cell).astype(np.int64)
+    gx = (fx[food] // cell).astype(np.int64)
+    grid_h, grid_w = int(h // cell) + 1, int(w // cell) + 1
+
+    column_h = np.zeros((grid_h, grid_w), dtype=np.float32)
+    np.maximum.at(column_h, (gy, gx), food_h)
+
+    pixel_area_m2 = (food_plane_z / focal_length_px) ** 2
+    cell_areas = np.zeros((grid_h, grid_w), dtype=np.float32)
+    np.add.at(cell_areas, (gy, gx), pixel_area_m2)
+
+    volume_m3 = float(np.sum(column_h * cell_areas))
+    volume_cm3 = volume_m3 * 1e6
+
+    result = {
+        "volume_cm3": volume_cm3,
+        "support_inliers": int(ransac.inlier_mask_.sum()),
+        "support_ratio": float(ransac.inlier_mask_.mean()),
+        "valid_volume_pixels": n_food,
+    }
+    if return_debug:
+        result["_debug"] = {
+            "plane_normal": [a, b, -1.0],
+            "plane_offset": float(c),
+            "volume_cm3_raw": float(volume_cm3),
+            "adaptive_threshold_m": float(threshold),
+            "p_high_m": float(p_high),
+            "height_cap_m": float(np.max(food_h)),
+            "n_columns": int((column_h > 0).sum()),
+            "cell_px": int(cell),
+        }
+    return result
+
