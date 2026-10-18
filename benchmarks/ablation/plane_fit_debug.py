@@ -16,6 +16,15 @@ from pathlib import Path
 
 import requests
 
+
+def _fmt(v, spec='.4f', suffix=''):
+    if v is None:
+        return '(missing)'
+    try:
+        return format(v, spec) + suffix
+    except (TypeError, ValueError):
+        return str(v) + suffix
+
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -84,9 +93,9 @@ def main():
     print("PLANE AND GEOMETRY")
     print("=" * 72)
     print(f"  plane_normal             {dbg.get('plane_normal')}")
-    print(f"  plane_offset             {dbg.get('plane_offset'):.4f} m")
+    print(f"  plane_offset             {_fmt(dbg.get('plane_offset'), '.4f')} m")
     print(f"  support_inliers          {dbg.get('support_inliers')}")
-    print(f"  support_ratio            {dbg.get('support_ratio'):.4f}")
+    print(f"  support_ratio            {_fmt(dbg.get('support_ratio'), '.4f')}")
     for k in sorted(dbg.keys()):
         v = dbg[k]
         if isinstance(v, (int, float)):
