@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ActualPlate | Food Intelligence API</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0f0f0f; color: #ffffff; font-family: system-ui, -apple-system, sans-serif; }
+        .code-block { background-color: #1e1e1e; border: 1px solid #333; border-radius: 8px; }
+        .loading { display: none; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+    <nav class="flex justify-between items-center p-6 max-w-7xl mx-auto w-full border-b border-gray-800">
+        <div class="flex items-center gap-2 text-xl font-bold">
+            <span class="text-orange-500">?</span> ActualPlate
+        </div>
+        <button class="bg-white text-black px-4 py-2 rounded font-semibold text-sm hover:bg-gray-200">Request Early Access</button>
+    </nav>
+    <main class="flex-grow flex flex-col lg:flex-row max-w-7xl mx-auto w-full p-6 gap-12 mt-8">
+        <div class="w-full lg:w-1/2 flex flex-col justify-center">
+            <h1 class="text-4xl lg:text-6xl font-bold leading-tight mb-6">Food Intelligence<br>API for B2B</h1>
+            <p class="text-gray-400 text-lg mb-8 max-w-lg">Upload an image to test the live pipeline (DINO ? SAM2 ? Depth ? FatSecret).</p>
+            <div class="border-2 border-dashed border-gray-600 rounded-xl p-10 text-center hover:border-orange-500 transition-colors cursor-pointer" onclick="document.getElementById('fileInput').click()">
+                <input type="file" id="fileInput" class="hidden" accept="image/*" onchange="handleImageUpload(event)">
+                <svg class="w-12 h-12 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                <p class="text-gray-300 font-medium mb-1">Click to upload image</p>
+            </div>
+            <div id="loading" class="loading mt-6 text-center text-orange-500 font-mono text-sm animate-pulse">Processing: Running DINO ? SAM2 ? Depth ? FatSecret...</div>
+        </div>
+        <div class="w-full lg:w-1/2 flex flex-col gap-6">
+            <div class="code-block p-5 shadow-2xl">
+                <div class="flex justify-between items-center border-b border-gray-700 pb-2 mb-3">
+                    <span class="text-gray-400 text-xs uppercase tracking-wider">API Response</span>
+                    <span id="statusCode" class="text-green-400 text-xs font-mono">Waiting...</span>
+                </div>
+                <pre id="jsonOutput" class="text-xs font-mono text-gray-300 overflow-x-auto max-h-64"><span class="text-gray-500">// JSON response will appear here...</span></pre>
+            </div>
+            <div id="vizContainer" class="hidden code-block p-5">
+                <h3 class="text-sm uppercase tracking-wider text-gray-400 mb-4">Live Visualizations</h3>
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div><p class="text-xs text-gray-500 mb-1">DINO Detection</p><img id="vizBox" class="w-full rounded bg-gray-900 border border-gray-700 object-cover aspect-square" src="" alt="Detection"></div>
+                    <div><p class="text-xs text-gray-500 mb-1">SAM2 Segmentation</p><img id="vizMask" class="w-full rounded bg-gray-900 border border-gray-700 object-cover aspect-square" src="" alt="Mask"></div>
+                    <div><p class="text-xs text-gray-500 mb-1">Depth Map</p><img id="vizDepth" class="w-full rounded bg-gray-900 border border-gray-700 object-cover aspect-square" src="" alt="Depth"></div>
+                    <div class="flex flex-col justify-center bg-gray-900 rounded p-4 border border-gray-700">
+                        <p class="text-xs text-gray-500 mb-1">Measured Volume</p>
+                        <p id="vizVolume" class="text-3xl font-bold text-orange-500">--</p>
+                        <p class="text-xs text-gray-500 mt-4 mb-1">Scale Confidence</p>
+                        <p id="vizConfidence" class="text-sm font-mono text-yellow-500">--</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <script>
+        // The build script replaces this placeholder with the real URL from .env
+        const API_URL = "{{API_URL}}"; 
+
+        async function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (API_URL.includes("{{")) {
+                alert("API_URL is not configured. Check environment variables.");
+                return;
+            }
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('jsonOutput').innerHTML = '<span class="text-orange-400">Sending to backend...</span>';
+            document.getElementById('vizContainer').classList.add('hidden');
+            document.getElementById('statusCode').innerText = "POST /detect";
+            
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("labels", "food");
+            
+            try {
+                const response = await fetch(API_URL, { method: "POST", body: formData, signal: AbortSignal.timeout(90000) });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                
+                document.getElementById('jsonOutput').textContent = JSON.stringify(data, null, 2);
+                document.getElementById('statusCode').className = "text-green-400 text-xs font-mono";
+                
+                if (data.foods && data.foods.length > 0) {
+                    const item = data.foods[0];
+                    document.getElementById('vizContainer').classList.remove('hidden');
+                    document.getElementById('vizVolume').innerText = item.volume_cm3 ? `${item.volume_cm3.toFixed(1)} cm?` : "N/A";
+                    document.getElementById('vizConfidence').innerText = item.scale_source || "Unresolved";
+                    
+                    if (item.debug) {
+                        if(item.debug.box_image) document.getElementById('vizBox').src = "data:image/jpeg;base64," + item.debug.box_image;
+                        if(item.debug.mask_image) document.getElementById('vizMask').src = "data:image/jpeg;base64," + item.debug.mask_image;
+                        if(item.debug.depth_image) document.getElementById('vizDepth').src = "data:image/jpeg;base64," + item.debug.depth_image;
+                    }
+                }
+            } catch (error) {
+                document.getElementById('jsonOutput').innerHTML = `<span class="text-red-500">Error: ${error.message}\n\nCheck if backend is running.</span>`;
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
