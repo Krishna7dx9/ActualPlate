@@ -52,6 +52,23 @@ from vision_service.inference.inference import detect_and_measure
 from vision_service.inference.models import models_loaded
 from vision_service.inference.volume import estimate_volume_cm3
 
+import base64
+import cv2
+
+def encode_img_to_base64(img_array):
+    """Converts OpenCV image array to Base64 string for JSON transport."""
+    if img_array is None:
+        return None
+    if img_array.dtype != 'uint8':
+        # Assuming float 0-1, convert to 0-255
+        img_array = (img_array * 255).astype('uint8')
+    success, buffer = cv2.imencode('.jpg', img_array)
+    if not success:
+        return None
+    return base64.b64encode(buffer).decode('utf-8')
+
+
+
 
 VISION_API_TOKEN = os.environ.get("VISION_API_TOKEN")
 
@@ -153,6 +170,13 @@ async def detect(
         for food, mask in zip(result.foods, result.masks):
 
             food_record = {
+
+        "debug": {
+            "box_image": encode_img_to_base64(locals().get("boxed_image")),
+            "mask_image": encode_img_to_base64(locals().get("masked_image")),
+            "depth_image": encode_img_to_base64(locals().get("depth_visualization"))
+        },
+
                 "label": food.label,
                 "score": food.score,
                 "mask_pixels": food.mask_pixels,
