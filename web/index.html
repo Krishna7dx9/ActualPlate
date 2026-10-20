@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -21,13 +21,13 @@
     <main class="flex-grow flex flex-col lg:flex-row max-w-7xl mx-auto w-full p-6 gap-12 mt-8">
         <div class="w-full lg:w-1/2 flex flex-col justify-center">
             <h1 class="text-4xl lg:text-6xl font-bold leading-tight mb-6">Food Intelligence<br>API for B2B</h1>
-            <p class="text-gray-400 text-lg mb-8 max-w-lg">Upload an image to test the live pipeline (DINO ? SAM2 ? Depth ? FatSecret).</p>
+            <p class="text-gray-400 text-lg mb-8 max-w-lg">Upload an image to test the live pipeline (DINO -> SAM2 -> Depth -> FatSecret).</p>
             <div class="border-2 border-dashed border-gray-600 rounded-xl p-10 text-center hover:border-orange-500 transition-colors cursor-pointer" onclick="document.getElementById('fileInput').click()">
                 <input type="file" id="fileInput" class="hidden" accept="image/*" onchange="handleImageUpload(event)">
                 <svg class="w-12 h-12 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                 <p class="text-gray-300 font-medium mb-1">Click to upload image</p>
             </div>
-            <div id="loading" class="loading mt-6 text-center text-orange-500 font-mono text-sm animate-pulse">Processing: Running DINO ? SAM2 ? Depth ? FatSecret...</div>
+            <div id="loading" class="loading mt-6 text-center text-orange-500 font-mono text-sm animate-pulse">Processing: Running DINO -> SAM2 -> Depth -> FatSecret...</div>
         </div>
         <div class="w-full lg:w-1/2 flex flex-col gap-6">
             <div class="code-block p-5 shadow-2xl">
@@ -102,3 +102,4 @@
     </script>
 </body>
 </html>
+

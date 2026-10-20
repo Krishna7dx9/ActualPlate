@@ -1,8 +1,7 @@
 ﻿import fs from 'fs';
 import path from 'path';
 
-// Reads from Netlify Env Vars OR local .env
-const apiUrl = process.env.VITE_API_URL || process.env.API_URL; 
+const apiUrl = process.env.VITE_API_URL;
 
 if (!apiUrl) {
     console.error("ERROR: VITE_API_URL environment variable is missing.");
@@ -18,4 +17,4 @@ const newHtml = html.replace('{{API_URL}}', apiUrl);
 
 if (!fs.existsSync('dist')) fs.mkdirSync('dist');
 fs.writeFileSync(outputPath, newHtml);
-console.log('✅ Built index.html');
+console.log('✅ Built index.html successfully');
