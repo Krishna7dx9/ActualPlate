@@ -74,7 +74,7 @@
             formData.append("labels", "food");
             
             try {
-                const response = await fetch(API_URL, { method: "POST", body: formData, signal: AbortSignal.timeout(90000) });
+                const response = await fetch(API_URL, { method: "POST", body: formData });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
                 
@@ -105,3 +105,4 @@
 
 
 <!-- Force rebuild 10/20/2026 23:58:13 -->
+
