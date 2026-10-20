@@ -46,14 +46,13 @@ import uuid
 import cv2
 import numpy as np
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from vision_service.inference.inference import detect_and_measure
 from vision_service.inference.models import models_loaded
 from vision_service.inference.volume import estimate_volume_cm3
 
-import base64
-import cv2
 
 def encode_img_to_base64(img_array):
     """Converts OpenCV image array to Base64 string for JSON transport."""
@@ -68,8 +67,6 @@ def encode_img_to_base64(img_array):
     return base64.b64encode(buffer).decode('utf-8')
 
 
-
-
 VISION_API_TOKEN = os.environ.get("VISION_API_TOKEN")
 
 # Maximum side length for arrays returned when include_arrays=true.
@@ -78,6 +75,14 @@ MAX_ARRAY_SIDE = 512
 app = FastAPI(
     title="ActualPlate Vision API",
     version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -170,17 +175,15 @@ async def detect(
         for food, mask in zip(result.foods, result.masks):
 
             food_record = {
-
-        "debug": {
-            "box_image": encode_img_to_base64(locals().get("boxed_image")),
-            "mask_image": encode_img_to_base64(locals().get("masked_image")),
-            "depth_image": encode_img_to_base64(locals().get("depth_visualization"))
-        },
-
                 "label": food.label,
                 "score": food.score,
                 "mask_pixels": food.mask_pixels,
                 "depth_m": food.depth_m,
+                "debug": {
+                    "box_image": encode_img_to_base64(locals().get("boxed_image")),
+                    "mask_image": encode_img_to_base64(locals().get("masked_image")),
+                    "depth_image": encode_img_to_base64(locals().get("depth_visualization"))
+                },
             }
 
             try:
