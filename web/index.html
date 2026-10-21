@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ActualPlate | Food Intelligence API</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com"></script><style>body { background-color: #0f0f0f; color: white; font-family: sans-serif; } .code-block { background: #1e1e1e; border: 1px solid #333; border-radius: 8px; }</style>
     <style>
         body { background-color: #0f0f0f; color: #ffffff; font-family: system-ui, -apple-system, sans-serif; }
         .code-block { background-color: #1e1e1e; border: 1px solid #333; border-radius: 8px; }
@@ -25,7 +25,7 @@
             <div class="border-2 border-dashed border-gray-600 rounded-xl p-10 text-center hover:border-orange-500 transition-colors cursor-pointer" onclick="document.getElementById('fileInput').click()">
                 <input type="file" id="fileInput" class="hidden" accept="image/*" onchange="handleImageUpload(event)">
                 <svg class="w-12 h-12 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                <p class="text-gray-300 font-medium mb-1">Click to upload image</p>
+                <p class="text-gray-300 font-medium mb-1">Click to upload a food photo</p>
             </div>
             <div id="loading" class="loading mt-6 text-center text-orange-500 font-mono text-sm animate-pulse">Processing: Running DINO -> SAM2 -> Depth -> FatSecret...</div>
         </div>
@@ -37,7 +37,7 @@
                 </div>
                 <pre id="jsonOutput" class="text-xs font-mono text-gray-300 overflow-x-auto max-h-64"><span class="text-gray-500">// JSON response will appear here...</span></pre>
             </div>
-            <div id="vizContainer" class="hidden code-block p-5">
+            <div id="vizContainer" class="hidden code-block p-5" style="display: none !important;">
                 <h3 class="text-sm uppercase tracking-wider text-gray-400 mb-4">Live Visualizations</h3>
                 <div class="grid grid-cols-2 gap-4 mb-4">
                     <div><p class="text-xs text-gray-500 mb-1">DINO Detection</p><img id="vizBox" class="w-full rounded bg-gray-900 border border-gray-700 object-cover aspect-square" src="" alt="Detection"></div>
@@ -105,5 +105,6 @@
 
 
 <!-- Force rebuild 10/20/2026 23:58:13 -->
+
 
 
