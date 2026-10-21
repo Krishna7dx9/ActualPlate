@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from backend.routes.nutrition import router as nutrition_router
 from backend.routes.upload import router as upload_router
