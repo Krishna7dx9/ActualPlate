@@ -119,8 +119,16 @@ async def process_image_stream(file):
         sam2_b64 = base64.b64encode(buffer).decode('utf-8')
         yield f"data: {json.dumps({'step': 'sam2', 'status': 'done', 'message': 'SAM2 segmented', 'image': sam2_b64})}\n\n"
 
-        # Depth
-        depth_img = cv2.applyColorMap(cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY), cv2.COLORMAP_JET)
+        # Depth (REAL DEPTH MAP)
+        real_depth_b64 = detections.get("depth_b64")
+        if real_depth_b64:
+            depth_bytes = base64.b64decode(real_depth_b64)
+            depth_np = cv2.imdecode(np.frombuffer(depth_bytes, np.uint8), cv2.IMREAD_GRAYSCALE)
+            depth_img = cv2.applyColorMap(depth_np, cv2.COLORMAP_JET)
+        else:
+            # Fallback if missing
+            depth_img = cv2.applyColorMap(cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY), cv2.COLORMAP_JET)
+
         _, buffer = cv2.imencode('.jpg', depth_img)
         depth_b64 = base64.b64encode(buffer).decode('utf-8')
         yield f"data: {json.dumps({'step': 'depth', 'status': 'done', 'message': 'Depth map generated', 'image': depth_b64})}\n\n"

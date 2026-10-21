@@ -187,6 +187,15 @@ async def detect(
 
             foods.append(food_record)
 
+        # Encode REAL depth map to Base64
+        import cv2
+        import numpy as np
+        depth_m = result.depth_map
+        depth_norm = cv2.normalize(depth_m, None, 0, 255, cv2.NORM_MINMAX)
+        depth_uint8 = depth_norm.astype(np.uint8)
+        _, depth_buffer = cv2.imencode('.png', depth_uint8)
+        depth_b64 = base64.b64encode(depth_buffer).decode('utf-8')
+
         response = {
             "foods": foods,
             "image_width": result.image_width,
@@ -194,6 +203,7 @@ async def detect(
             "focal_length_px": result.focal_length_px,
             "depth_unit": result.depth_unit,
             "request_id": request_id,
+            "depth_b64": depth_b64,
         }
 
         if include_arrays:
