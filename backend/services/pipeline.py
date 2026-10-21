@@ -47,7 +47,12 @@ async def process_image(file: UploadFile):
                         nutrition_results.append(format_nutrition_response(data, mass))
                 except Exception: pass
 
-        return {"foods": nutrition_results, "total_detected": len(foods_data), "total_nutrition": aggregate_nutrition(nutrition_results)}
+        return {
+            "foods": nutrition_results, 
+            "geometry": foods_data,
+            "total_detected": len(foods_data), 
+            "total_nutrition": aggregate_nutrition(nutrition_results)
+        }
     finally:
         if image_path and os.path.exists(image_path): os.remove(image_path)
 
