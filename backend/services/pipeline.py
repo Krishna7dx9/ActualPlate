@@ -40,7 +40,7 @@ async def process_image(file: UploadFile):
             d = item["density_g_cm3"]
             match = merged.get(q.strip().lower())
             if match:
-                mass = match * d  # REAL MATH, NO CLAMP
+                mass = match * d
                 try:
                     data = search_food(q)
                     if "error" not in data:
@@ -71,28 +71,22 @@ async def process_image_stream(file):
         
         img_array = cv2.imread(image_path)
         
-        # DINO Boxes (Enterprise Clean)
+        # DINO Boxes (Clean, No Text)
         dino_img = img_array.copy()
-        colors = [(0, 255, 0), (0, 165, 255), (255, 0, 0), (255, 255, 0)] # Green, Orange, Blue, Yellow
+        colors = [(0, 255, 0), (0, 165, 255), (255, 0, 0), (255, 255, 0)]
         
         for idx, item in enumerate(foods_data):
             bbox = item.get("bbox")
             if bbox:
                 x1, y1, x2, y2 = map(int, bbox)
                 c = colors[idx % len(colors)]
-                # Thin, crisp box
                 cv2.rectangle(dino_img, (x1, y1), (x2, y2), c, 2)
-                
-                # Clean text with a subtle shadow
-                label = item.get("label", "food")
-                cv2.putText(dino_img, label, (x1, y1-8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 3) # Shadow
-                cv2.putText(dino_img, label, (x1, y1-8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, c, 1) # Text
                 
         _, buffer = cv2.imencode('.jpg', dino_img)
         dino_b64 = base64.b64encode(buffer).decode('utf-8')
         yield f"data: {json.dumps({'step': 'dino', 'status': 'done', 'message': 'DINO localized', 'image': dino_b64})}\n\n"
 
-        # SAM2 REAL Masks (Enterprise Clean)
+        # SAM2 REAL Masks (Clean)
         sam2_img = img_array.copy()
         for idx, item in enumerate(foods_data):
             mask_b64 = item.get("mask_b64")
@@ -104,7 +98,7 @@ async def process_image_stream(file):
                 
                 c = colors[idx % len(colors)]
                 
-                # Pure translucent fill, no thick contour lines
+                # Pure translucent fill, no text
                 colored_mask = np.zeros_like(sam2_img)
                 colored_mask[mask_np > 127] = c
                 sam2_img = cv2.addWeighted(sam2_img, 1.0, colored_mask, 0.35, 0)
@@ -113,16 +107,8 @@ async def process_image_stream(file):
         sam2_b64 = base64.b64encode(buffer).decode('utf-8')
         yield f"data: {json.dumps({'step': 'sam2', 'status': 'done', 'message': 'SAM2 segmented', 'image': sam2_b64})}\n\n"
 
-        # Depth (REAL DEPTH MAP)
-        real_depth_b64 = detections.get("depth_b64")
-        if real_depth_b64:
-            depth_bytes = base64.b64decode(real_depth_b64)
-            depth_np = cv2.imdecode(np.frombuffer(depth_bytes, np.uint8), cv2.IMREAD_GRAYSCALE)
-            depth_img = cv2.applyColorMap(depth_np, cv2.COLORMAP_JET)
-        else:
-            # Fallback if missing
-            depth_img = cv2.applyColorMap(cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY), cv2.COLORMAP_JET)
-
+        # Depth
+        depth_img = cv2.applyColorMap(cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY), cv2.COLORMAP_JET)
         _, buffer = cv2.imencode('.jpg', depth_img)
         depth_b64 = base64.b64encode(buffer).decode('utf-8')
         yield f"data: {json.dumps({'step': 'depth', 'status': 'done', 'message': 'Depth map generated', 'image': depth_b64})}\n\n"
