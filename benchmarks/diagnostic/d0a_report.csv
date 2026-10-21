@@ -1,0 +1,12 @@
+class,photos,items,r_median,r_iqr,within_sd,between_sd,base_ape_pct,loo_ape_pct,rho_hcap
+apple,40,4,0.012,0.004,0.237,0.037,8135.3,insufficient,n/a
+avocado,40,4,0.009,0.003,0.196,0.164,11652.5,insufficient,n/a
+bagel,35,4,0.02,0.007,0.314,0.115,4956.5,insufficient,n/a
+biscuit,29,2,0.006,0.002,0.222,0.098,17098.3,insufficient,n/a
+blueberry_muffin,40,4,0.011,0.005,0.341,0.219,8947.0,insufficient,n/a
+broccoli,40,4,0.005,0.001,0.22,0.06,21719.6,insufficient,n/a
+chicken_nugget,39,2,0.005,0.002,0.308,0.064,21924.0,insufficient,n/a
+cinnamon_roll,40,4,0.006,0.002,0.218,0.169,16790.7,insufficient,n/a
+corn,30,3,0.019,0.006,0.268,0.024,5063.2,insufficient,n/a
+croissant,35,4,0.015,0.004,0.229,0.153,6498.8,insufficient,n/a
+strawberry,38,3,0.004,0.001,0.236,0.183,27966.7,insufficient,n/a

@@ -32,7 +32,7 @@ class GroundingDINODetector(BaseDetector):
                 data={
                     "labels": ",".join(labels)
                 },
-                timeout=120
+                timeout=300
             )
 
         response.raise_for_status()
