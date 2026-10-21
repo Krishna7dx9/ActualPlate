@@ -28,7 +28,6 @@
     </nav>
 
     <main class="flex flex-col lg:flex-row max-w-7xl mx-auto w-full gap-8">
-        <!-- Upload Section -->
         <div class="w-full lg:w-1/3">
             <h1 class="text-3xl font-bold mb-4">Food Intelligence API</h1>
             <p class="text-gray-400 mb-6">Upload a photo to watch the AI pipeline execute live.</p>
@@ -38,43 +37,32 @@
             </div>
         </div>
 
-        <!-- Pipeline Visualizer -->
         <div class="w-full lg:w-2/3" id="pipelineContainer" style="display: none;">
-            
             <div id="step-gemma" class="step-card">
                 <h3 class="font-bold text-lg mb-1">🍎 1. Gemma (Food Recognition)</h3>
                 <p class="text-sm text-gray-400" id="msg-gemma">Waiting...</p>
-                <pre id="data-gemma" class="text-xs text-green-400 mt-2 hidden"></pre>
+                <pre id="data-gemma" class="text-xs text-green-400 mt-2 hidden overflow-x-auto"></pre>
             </div>
-
             <div id="step-dino" class="step-card">
                 <h3 class="font-bold text-lg mb-1">🎯 2. Grounding DINO (Localization)</h3>
                 <p class="text-sm text-gray-400" id="msg-dino">Waiting...</p>
-                <img id="img-dino" class="step-img hidden" />
             </div>
-
             <div id="step-sam2" class="step-card">
                 <h3 class="font-bold text-lg mb-1">✂️ 3. SAM2 (Segmentation)</h3>
                 <p class="text-sm text-gray-400" id="msg-sam2">Waiting...</p>
-                <img id="img-sam2" class="step-img hidden" />
             </div>
-
             <div id="step-depth" class="step-card">
                 <h3 class="font-bold text-lg mb-1">🏔️ 4. Depth Pro (3D Geometry)</h3>
                 <p class="text-sm text-gray-400" id="msg-depth">Waiting...</p>
-                <img id="img-depth" class="step-img hidden" />
             </div>
-
             <div id="step-volume" class="step-card">
                 <h3 class="font-bold text-lg mb-1">📐 5. Volume Math</h3>
                 <p class="text-sm text-gray-400" id="msg-volume">Waiting...</p>
             </div>
-
             <div id="step-nutrition" class="step-card">
                 <h3 class="font-bold text-lg mb-1">🥗 6. FatSecret (Nutrition)</h3>
                 <p class="text-sm text-gray-400" id="msg-nutrition">Waiting...</p>
             </div>
-
             <div class="code-block p-4 mt-6">
                 <div class="flex justify-between border-b border-gray-700 pb-2 mb-2">
                     <span class="text-gray-400 text-sm">Final API Response</span>
@@ -106,7 +94,7 @@
             if (!file) return;
 
             const showDebug = toggle.checked;
-            const endpoint = showDebug ? `${API_URL.replace('/upload-image', '/upload-image-stream')}` : API_URL;
+            const endpoint = showDebug ? API_URL.replace('/upload-image', '/upload-image-stream') : API_URL;
             
             document.getElementById('jsonOutput').innerText = "// Connecting to backend...";
             document.getElementById('statusCode').innerText = "POST";
@@ -114,13 +102,10 @@
             
             if (showDebug) {
                 document.getElementById('pipelineContainer').style.display = "block";
-                // Reset all cards
                 ['gemma', 'dino', 'sam2', 'depth', 'volume', 'nutrition'].forEach(step => {
                     const el = document.getElementById(`step-${step}`);
                     el.className = 'step-card';
                     document.getElementById(`msg-${step}`).innerText = "Waiting...";
-                    const img = document.getElementById(`img-${step}`);
-                    if(img) img.classList.add('hidden');
                     const data = document.getElementById(`data-${step}`);
                     if(data) data.classList.add('hidden');
                 });
@@ -184,14 +169,6 @@
                 msg.innerText = data.message;
             }
 
-            if (data.image) {
-                const img = document.getElementById(`img-${stepId}`);
-                if(img) {
-                    img.src = "data:image/jpeg;base64," + data.image;
-                    img.classList.remove('hidden');
-                }
-            }
-
             if (data.data && stepId === 'gemma') {
                 const pre = document.getElementById(`data-gemma`);
                 pre.innerText = JSON.stringify(data.data, null, 2);
@@ -205,7 +182,3 @@
     </script>
 </body>
 </html>
-
-<!-- Verified for streaming pipeline demo -->
-
-<!-- Force rebuild 10/21/2026 17:26:00 -->
