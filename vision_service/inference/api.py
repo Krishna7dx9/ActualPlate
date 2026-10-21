@@ -158,6 +158,7 @@ async def detect(
                 "mask_pixels": food.mask_pixels,
                 "depth_m": food.depth_m,
                 "bbox": getattr(food, "bbox", None),
+                "mask_b64": getattr(food, "mask_b64", None),
             }
 
             try:

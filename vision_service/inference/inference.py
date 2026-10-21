@@ -18,6 +18,7 @@ No HTTP, no FastAPI, no request handling. That is api.py's job.
 from __future__ import annotations
 
 import os
+import base64
 from dataclasses import dataclass, field
 
 import cv2
@@ -55,6 +56,7 @@ class FoodDetection:
     mask_pixels: int
     depth_m: dict  # {"min": float | None, "median": ..., "max": ...}
     bbox: list[float] | None = None
+    mask_b64: str | None = None
 
 
 @dataclass
@@ -85,6 +87,7 @@ class InferenceResult:
                     "mask_pixels": f.mask_pixels,
                     "depth_m": f.depth_m,
                     "bbox": f.bbox,
+                    "mask_b64": f.mask_b64,
                 }
                 for f in self.foods
             ],
@@ -296,6 +299,11 @@ def detect_and_measure(
             "max": float(np.max(food_depth)) if len(food_depth) else None,
         }
 
+        # Encode mask to base64
+        mask_uint8 = (mask * 255).astype(np.uint8)
+        _, mask_buffer = cv2.imencode('.png', mask_uint8)
+        mask_b64 = base64.b64encode(mask_buffer).decode('utf-8')
+
         foods.append(
             FoodDetection(
                 label=str(label),
@@ -303,6 +311,7 @@ def detect_and_measure(
                 mask_pixels=int(mask.sum()),
                 depth_m=depth_stats,
                 bbox=box.tolist() if hasattr(box, "tolist") else [float(x) for x in box],
+                mask_b64=mask_b64,
             )
         )
 
