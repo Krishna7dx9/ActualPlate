@@ -1,0 +1,207 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ActualPlate | Live Pipeline</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background: #0f0f0f; color: white; font-family: sans-serif; }
+        .code-block { background: #1e1e1e; border: 1px solid #333; border-radius: 8px; }
+        .step-card { border-left: 4px solid #333; background: #1a1a1a; margin-bottom: 10px; padding: 15px; border-radius: 0 8px 8px 0; opacity: 0.4; transition: all 0.3s; }
+        .step-card.active { opacity: 1; border-left-color: #f97316; box-shadow: 0 0 10px rgba(249,115,22,0.1); }
+        .step-card.done { opacity: 1; border-left-color: #22c55e; }
+        .step-img { max-height: 200px; border-radius: 8px; margin-top: 10px; border: 1px solid #333; }
+    </style>
+</head>
+<body class="min-h-screen p-6">
+    <nav class="flex justify-between items-center max-w-7xl mx-auto w-full border-b border-gray-800 pb-4 mb-8">
+        <div class="text-2xl font-bold"><span class="text-orange-500">◉</span> ActualPlate</div>
+        <label class="flex items-center cursor-pointer">
+            <span class="mr-3 text-sm text-gray-400">Show Live Pipeline</span>
+            <div class="relative">
+                <input type="checkbox" id="debugToggle" class="sr-only" checked>
+                <div class="block bg-orange-500 w-10 h-6 rounded-full transition"></div>
+                <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition translate-x-4"></div>
+            </div>
+        </label>
+    </nav>
+
+    <main class="flex flex-col lg:flex-row max-w-7xl mx-auto w-full gap-8">
+        <!-- Upload Section -->
+        <div class="w-full lg:w-1/3">
+            <h1 class="text-3xl font-bold mb-4">Food Intelligence API</h1>
+            <p class="text-gray-400 mb-6">Upload a photo to watch the AI pipeline execute live.</p>
+            <div class="border-2 border-dashed border-gray-600 rounded-xl p-8 text-center hover:border-orange-500 cursor-pointer" onclick="document.getElementById('fileInput').click()">
+                <input type="file" id="fileInput" class="hidden" accept="image/*" onchange="handleUpload(event)">
+                <p class="text-gray-300">Click to upload a food photo</p>
+            </div>
+        </div>
+
+        <!-- Pipeline Visualizer -->
+        <div class="w-full lg:w-2/3" id="pipelineContainer" style="display: none;">
+            
+            <div id="step-gemma" class="step-card">
+                <h3 class="font-bold text-lg mb-1">🍎 1. Gemma (Food Recognition)</h3>
+                <p class="text-sm text-gray-400" id="msg-gemma">Waiting...</p>
+                <pre id="data-gemma" class="text-xs text-green-400 mt-2 hidden"></pre>
+            </div>
+
+            <div id="step-dino" class="step-card">
+                <h3 class="font-bold text-lg mb-1">🎯 2. Grounding DINO (Localization)</h3>
+                <p class="text-sm text-gray-400" id="msg-dino">Waiting...</p>
+                <img id="img-dino" class="step-img hidden" />
+            </div>
+
+            <div id="step-sam2" class="step-card">
+                <h3 class="font-bold text-lg mb-1">✂️ 3. SAM2 (Segmentation)</h3>
+                <p class="text-sm text-gray-400" id="msg-sam2">Waiting...</p>
+                <img id="img-sam2" class="step-img hidden" />
+            </div>
+
+            <div id="step-depth" class="step-card">
+                <h3 class="font-bold text-lg mb-1">🏔️ 4. Depth Pro (3D Geometry)</h3>
+                <p class="text-sm text-gray-400" id="msg-depth">Waiting...</p>
+                <img id="img-depth" class="step-img hidden" />
+            </div>
+
+            <div id="step-volume" class="step-card">
+                <h3 class="font-bold text-lg mb-1">📐 5. Volume Math</h3>
+                <p class="text-sm text-gray-400" id="msg-volume">Waiting...</p>
+            </div>
+
+            <div id="step-nutrition" class="step-card">
+                <h3 class="font-bold text-lg mb-1">🥗 6. FatSecret (Nutrition)</h3>
+                <p class="text-sm text-gray-400" id="msg-nutrition">Waiting...</p>
+            </div>
+
+            <div class="code-block p-4 mt-6">
+                <div class="flex justify-between border-b border-gray-700 pb-2 mb-2">
+                    <span class="text-gray-400 text-sm">Final API Response</span>
+                    <span id="statusCode" class="text-gray-500 text-xs">Pending</span>
+                </div>
+                <pre id="jsonOutput" class="text-sm font-mono text-gray-300 overflow-x-auto max-h-60">// Waiting for pipeline to finish...</pre>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = "{{API_URL}}"; 
+        const toggle = document.getElementById('debugToggle');
+        
+        toggle.addEventListener('change', (e) => {
+            const dot = e.target.nextElementSibling.nextElementSibling;
+            const bg = e.target.nextElementSibling;
+            if(e.target.checked) {
+                bg.classList.replace('bg-gray-600', 'bg-orange-500');
+                dot.classList.add('translate-x-4');
+            } else {
+                bg.classList.replace('bg-orange-500', 'bg-gray-600');
+                dot.classList.remove('translate-x-4');
+            }
+        });
+
+        async function handleUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const showDebug = toggle.checked;
+            const endpoint = showDebug ? `${API_URL.replace('/upload-image', '/upload-image-stream')}` : API_URL;
+            
+            document.getElementById('jsonOutput').innerText = "// Connecting to backend...";
+            document.getElementById('statusCode').innerText = "POST";
+            document.getElementById('statusCode').className = "text-orange-400 text-xs";
+            
+            if (showDebug) {
+                document.getElementById('pipelineContainer').style.display = "block";
+                // Reset all cards
+                ['gemma', 'dino', 'sam2', 'depth', 'volume', 'nutrition'].forEach(step => {
+                    const el = document.getElementById(`step-${step}`);
+                    el.className = 'step-card';
+                    document.getElementById(`msg-${step}`).innerText = "Waiting...";
+                    const img = document.getElementById(`img-${step}`);
+                    if(img) img.classList.add('hidden');
+                    const data = document.getElementById(`data-${step}`);
+                    if(data) data.classList.add('hidden');
+                });
+            } else {
+                document.getElementById('pipelineContainer').style.display = "none";
+            }
+
+            const formData = new FormData();
+            formData.append("file", file);
+
+            try {
+                const response = await fetch(endpoint, { method: "POST", body: formData });
+                
+                if (showDebug) {
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = "";
+                    
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n\n');
+                        buffer = lines.pop(); 
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                const data = JSON.parse(line.substring(6));
+                                updateStep(data);
+                            }
+                        }
+                    }
+                } else {
+                    const data = await response.json();
+                    document.getElementById('jsonOutput').innerText = JSON.stringify(data, null, 2);
+                }
+
+                document.getElementById('statusCode').innerText = "200 OK";
+                document.getElementById('statusCode').className = "text-green-400 text-xs";
+
+            } catch (error) {
+                document.getElementById('jsonOutput').innerText = `Error: ${error.message}`;
+                document.getElementById('statusCode').innerText = "FAILED";
+                document.getElementById('statusCode').className = "text-red-500 text-xs";
+            }
+        }
+
+        function updateStep(data) {
+            if (data.step === 'error') {
+                document.getElementById('jsonOutput').innerText = `Error: ${data.message}`;
+                return;
+            }
+
+            const stepId = data.step;
+            const card = document.getElementById(`step-${stepId}`);
+            const msg = document.getElementById(`msg-${stepId}`);
+            
+            if (card) {
+                card.className = data.status === 'running' ? 'step-card active' : 'step-card done';
+                msg.innerText = data.message;
+            }
+
+            if (data.image) {
+                const img = document.getElementById(`img-${stepId}`);
+                if(img) {
+                    img.src = "data:image/jpeg;base64," + data.image;
+                    img.classList.remove('hidden');
+                }
+            }
+
+            if (data.data && stepId === 'gemma') {
+                const pre = document.getElementById(`data-gemma`);
+                pre.innerText = JSON.stringify(data.data, null, 2);
+                pre.classList.remove('hidden');
+            }
+
+            if (data.final) {
+                document.getElementById('jsonOutput').innerText = JSON.stringify(data.final, null, 2);
+            }
+        }
+    </script>
+</body>
+</html>
