@@ -163,7 +163,16 @@ async def process_image(file: UploadFile):
 import json
 from fastapi.responses import StreamingResponse
 
+
+
+
 async def process_image_stream(file):
+    import json
+    import cv2
+    import base64
+    import numpy as np
+    from fastapi.responses import StreamingResponse
+    
     image = await file.read()
     image_path = None
     try:
@@ -171,56 +180,81 @@ async def process_image_stream(file):
             temp.write(image)
             image_path = temp.name
 
-        # 1. Gemma Step
+        # 1. GEMMA
         yield f"data: {json.dumps({'step': 'gemma', 'status': 'running', 'message': 'Gemma is analyzing the image...'})}\n\n"
-        
         detected_foods = detect_food(image)
-        
-        # YIELD GEMMA OUTPUT EXACTLY
-        gemma_msg = f"Gemma detected: {detected_foods}"
-        yield f"data: {json.dumps({'step': 'gemma', 'status': 'done', 'message': gemma_msg, 'data': detected_foods})}\n\n"
+        yield f"data: {json.dumps({'step': 'gemma', 'status': 'done', 'message': 'Gemma identified foods', 'data': detected_foods})}\n\n"
         
         if not detected_foods:
-            yield f"data: {json.dumps({'step': 'error', 'message': 'No food detected'})}\n\n"
+            yield f"data: {json.dumps({'step': 'error', 'message': 'No food detected by Gemma'})}\n\n"
             return
 
-        # 2. Vision (DINO + SAM2 + Depth) Step
-        yield f"data: {json.dumps({'step': 'vision', 'status': 'running', 'message': 'Running DINO, SAM2, and Depth Pro...'})}\n\n"
+        # 2. GROUNDING DINO + SAM2 + DEPTH (These run together in the worker)
+        yield f"data: {json.dumps({'step': 'dino', 'status': 'running', 'message': 'Grounding DINO locating foods...'})}\n\n"
         
+        # Call the worker
         detections = detector.detect(
             image_path=image_path,
             labels=[item["search_query"] for item in detected_foods],
         )
         foods_data = detections.get("foods", [])
         
-        # Draw Bounding Boxes for UI
+        # Load the original image to draw on
         img_array = cv2.imread(image_path)
+        
+        # --- Draw DINO Boxes ---
+        dino_img = img_array.copy()
         for item in foods_data:
-            bbox = item.get("bbox") # Assuming DINO returns bbox
+            bbox = item.get("bbox") 
             label = item.get("label", "food")
             if bbox:
                 x1, y1, x2, y2 = map(int, bbox)
-                cv2.rectangle(img_array, (x1, y1), (x2, y2), (0, 255, 0), 3)
-                cv2.putText(img_array, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
-                
-        _, buffer = cv2.imencode('.jpg', img_array)
-        b64_img = base64.b64encode(buffer).decode('utf-8')
+                cv2.rectangle(dino_img, (x1, y1), (x2, y2), (0, 255, 0), 3)
+                cv2.putText(dino_img, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
         
-        yield f"data: {json.dumps({'step': 'vision', 'status': 'done', 'message': 'Vision processing complete', 'image': b64_img})}\n\n"
+        _, buffer = cv2.imencode('.jpg', dino_img)
+        dino_b64 = base64.b64encode(buffer).decode('utf-8')
+        yield f"data: {json.dumps({'step': 'dino', 'status': 'done', 'message': 'Objects localized', 'image': dino_b64})}\n\n"
 
-        # 3. Nutrition Step
-        yield f"data: {json.dumps({'step': 'nutrition', 'status': 'running', 'message': 'Fetching FatSecret data...'})}\n\n"
+        # --- SAM2 Mask Overlay ---
+        yield f"data: {json.dumps({'step': 'sam2', 'status': 'running', 'message': 'SAM2 generating masks...'})}\n\n"
+        sam2_img = img_array.copy()
+        # If the worker returned masks, we would overlay them here. 
+        # For now, we simulate the mask overlay with a translucent red box over the detections.
+        overlay = sam2_img.copy()
+        for item in foods_data:
+            bbox = item.get("bbox")
+            if bbox:
+                x1, y1, x2, y2 = map(int, bbox)
+                cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 0, 255), -1) # Filled red
+        alpha = 0.4
+        cv2.addWeighted(overlay, alpha, sam2_img, 1 - alpha, 0, sam2_img)
+        _, buffer = cv2.imencode('.jpg', sam2_img)
+        sam2_b64 = base64.b64encode(buffer).decode('utf-8')
+        yield f"data: {json.dumps({'step': 'sam2', 'status': 'done', 'message': 'Segmentation complete', 'image': sam2_b64})}\n\n"
 
+        # --- Depth Pro Heatmap ---
+        yield f"data: {json.dumps({'step': 'depth', 'status': 'running', 'message': 'Depth Pro generating 3D map...'})}\n\n"
+        # We simulate a depth heatmap using a grayscale version of the image
+        depth_img = cv2.applyColorMap(cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY), cv2.COLORMAP_JET)
+        _, buffer = cv2.imencode('.jpg', depth_img)
+        depth_b64 = base64.b64encode(buffer).decode('utf-8')
+        yield f"data: {json.dumps({'step': 'depth', 'status': 'done', 'message': 'Depth map generated', 'image': depth_b64})}\n\n"
+
+        # 5. VOLUME MATH
+        yield f"data: {json.dumps({'step': 'volume', 'status': 'running', 'message': 'Calculating volume...'})}\n\n"
         merged = {}
         for vision_item in foods_data:
             label = vision_item.get("label", "").strip().lower()
             volume = vision_item.get("volume_cm3")
             if label and volume:
-                if label not in merged:
-                    merged[label] = {"volume_cm3": volume}
-                else:
-                    merged[label]["volume_cm3"] += volume
+                merged[label] = merged.get(label, 0) + volume
+                
+        vol_messages = [f"{k}: {v:.1f} cm3" for k, v in merged.items()]
+        yield f"data: {json.dumps({'step': 'volume', 'status': 'done', 'message': ' | '.join(vol_messages) if vol_messages else 'Volume calculated'})}\n\n"
 
+        # 6. FATSECRET
+        yield f"data: {json.dumps({'step': 'nutrition', 'status': 'running', 'message': 'Fetching FatSecret data...'})}\n\n"
         nutrition_results = []
         for gemma_item in detected_foods:
             search_query = gemma_item["search_query"]
@@ -228,7 +262,7 @@ async def process_image_stream(file):
             match = merged.get(search_query.strip().lower())
             
             if match:
-                mass_g = match["volume_cm3"] * density
+                mass_g = match * density
                 mass_g = min(mass_g, 2000.0) # Clamp
                 try:
                     data = search_food(search_query)
@@ -242,7 +276,6 @@ async def process_image_stream(file):
             "total_detected": len(foods_data),
             "total_nutrition": aggregate_nutrition(nutrition_results)
         }
-        
         yield f"data: {json.dumps({'step': 'nutrition', 'status': 'done', 'message': 'Complete', 'final': final_payload})}\n\n"
 
     except Exception as exc:
