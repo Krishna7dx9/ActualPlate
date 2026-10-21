@@ -54,6 +54,7 @@ class FoodDetection:
     score: float
     mask_pixels: int
     depth_m: dict  # {"min": float | None, "median": ..., "max": ...}
+    bbox: list[float] | None = None
 
 
 @dataclass
@@ -83,6 +84,7 @@ class InferenceResult:
                     "score": f.score,
                     "mask_pixels": f.mask_pixels,
                     "depth_m": f.depth_m,
+                    "bbox": f.bbox,
                 }
                 for f in self.foods
             ],
@@ -277,7 +279,7 @@ def detect_and_measure(
 
     foods: list[FoodDetection] = []
 
-    for label, score, mask in zip(detected_labels, scores, masks):
+    for label, score, mask, box in zip(detected_labels, scores, masks, boxes):
         if mask.shape != depth_map.shape:
             mask = cv2.resize(
                 mask.astype(np.uint8),
@@ -300,6 +302,7 @@ def detect_and_measure(
                 score=float(score),
                 mask_pixels=int(mask.sum()),
                 depth_m=depth_stats,
+                bbox=box.tolist() if hasattr(box, "tolist") else [float(x) for x in box],
             )
         )
 
