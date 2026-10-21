@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -129,7 +129,9 @@
                         if (done) break;
                         
                         buffer += decoder.decode(value, { stream: true });
-                        const lines = buffer.split('\n\n');
+                        const lines = buffer.split('
+
+');
                         buffer = lines.pop(); 
                         
                         for (const line of lines) {
