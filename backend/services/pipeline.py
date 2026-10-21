@@ -1,5 +1,8 @@
 import os
 import tempfile
+import base64
+import cv2
+import numpy as np
 
 from fastapi import UploadFile
 
@@ -152,6 +155,98 @@ async def process_image(file: UploadFile):
             "details": str(exc),
         }
 
+    finally:
+        if image_path and os.path.exists(image_path):
+            os.remove(image_path)
+
+
+import json
+from fastapi.responses import StreamingResponse
+
+async def process_image_stream(file):
+    image = await file.read()
+    image_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp:
+            temp.write(image)
+            image_path = temp.name
+
+        # 1. Gemma Step
+        yield f"data: {json.dumps({'step': 'gemma', 'status': 'running', 'message': 'Gemma is analyzing the image...'})}\n\n"
+        
+        detected_foods = detect_food(image)
+        
+        # YIELD GEMMA OUTPUT EXACTLY
+        gemma_msg = f"Gemma detected: {detected_foods}"
+        yield f"data: {json.dumps({'step': 'gemma', 'status': 'done', 'message': gemma_msg, 'data': detected_foods})}\n\n"
+        
+        if not detected_foods:
+            yield f"data: {json.dumps({'step': 'error', 'message': 'No food detected'})}\n\n"
+            return
+
+        # 2. Vision (DINO + SAM2 + Depth) Step
+        yield f"data: {json.dumps({'step': 'vision', 'status': 'running', 'message': 'Running DINO, SAM2, and Depth Pro...'})}\n\n"
+        
+        detections = detector.detect(
+            image_path=image_path,
+            labels=[item["search_query"] for item in detected_foods],
+        )
+        foods_data = detections.get("foods", [])
+        
+        # Draw Bounding Boxes for UI
+        img_array = cv2.imread(image_path)
+        for item in foods_data:
+            bbox = item.get("bbox") # Assuming DINO returns bbox
+            label = item.get("label", "food")
+            if bbox:
+                x1, y1, x2, y2 = map(int, bbox)
+                cv2.rectangle(img_array, (x1, y1), (x2, y2), (0, 255, 0), 3)
+                cv2.putText(img_array, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+                
+        _, buffer = cv2.imencode('.jpg', img_array)
+        b64_img = base64.b64encode(buffer).decode('utf-8')
+        
+        yield f"data: {json.dumps({'step': 'vision', 'status': 'done', 'message': 'Vision processing complete', 'image': b64_img})}\n\n"
+
+        # 3. Nutrition Step
+        yield f"data: {json.dumps({'step': 'nutrition', 'status': 'running', 'message': 'Fetching FatSecret data...'})}\n\n"
+
+        merged = {}
+        for vision_item in foods_data:
+            label = vision_item.get("label", "").strip().lower()
+            volume = vision_item.get("volume_cm3")
+            if label and volume:
+                if label not in merged:
+                    merged[label] = {"volume_cm3": volume}
+                else:
+                    merged[label]["volume_cm3"] += volume
+
+        nutrition_results = []
+        for gemma_item in detected_foods:
+            search_query = gemma_item["search_query"]
+            density = gemma_item["density_g_cm3"]
+            match = merged.get(search_query.strip().lower())
+            
+            if match:
+                mass_g = match["volume_cm3"] * density
+                mass_g = min(mass_g, 2000.0) # Clamp
+                try:
+                    data = search_food(search_query)
+                    if "error" not in data:
+                        nutrition_results.append(format_nutrition_response(data, mass_g))
+                except Exception:
+                    pass
+
+        final_payload = {
+            "foods": nutrition_results,
+            "total_detected": len(foods_data),
+            "total_nutrition": aggregate_nutrition(nutrition_results)
+        }
+        
+        yield f"data: {json.dumps({'step': 'nutrition', 'status': 'done', 'message': 'Complete', 'final': final_payload})}\n\n"
+
+    except Exception as exc:
+        yield f"data: {json.dumps({'step': 'error', 'message': str(exc)})}\n\n"
     finally:
         if image_path and os.path.exists(image_path):
             os.remove(image_path)
