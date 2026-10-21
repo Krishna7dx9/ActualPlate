@@ -34,6 +34,7 @@ async def process_image(file: UploadFile):
         # -------------------------------------------------
 
         detected_foods = detect_food(image)
+        print(f"DEBUG - GEMMA RAW OUTPUT: {detected_foods}")
 
         if not detected_foods:
             return {
