@@ -71,21 +71,30 @@ async def process_image_stream(file):
         
         img_array = cv2.imread(image_path)
         
-        # DINO Boxes
+        # DINO Boxes (Hackathon Polish)
         dino_img = img_array.copy()
-        colors = [(0, 255, 0), (255, 0, 0), (0, 0, 255), (255, 255, 0), (0, 255, 255)]
+        # BGR Format: Neon Green, Cyan, Magenta, Yellow
+        colors = [(0, 255, 0), (255, 255, 0), (255, 0, 255), (0, 255, 255)]
+        
         for idx, item in enumerate(foods_data):
             bbox = item.get("bbox")
             if bbox:
                 x1, y1, x2, y2 = map(int, bbox)
                 c = colors[idx % len(colors)]
-                cv2.rectangle(dino_img, (x1, y1), (x2, y2), c, 6)
-                cv2.putText(dino_img, item.get("label", "food"), (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 1.2, c, 4)
+                # Thicker box (width 5)
+                cv2.rectangle(dino_img, (x1, y1), (x2, y2), c, 5)
+                
+                # Add readable label background
+                label = item.get("label", "food")
+                (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)
+                cv2.rectangle(dino_img, (x1, y1-35), (x1+w, y1), c, -1)
+                cv2.putText(dino_img, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 2)
+                
         _, buffer = cv2.imencode('.jpg', dino_img)
         dino_b64 = base64.b64encode(buffer).decode('utf-8')
         yield f"data: {json.dumps({'step': 'dino', 'status': 'done', 'message': 'DINO localized', 'image': dino_b64})}\n\n"
 
-        # SAM2 REAL Masks
+        # SAM2 REAL Masks (Hackathon Polish)
         sam2_img = img_array.copy()
         for idx, item in enumerate(foods_data):
             mask_b64 = item.get("mask_b64")
@@ -96,9 +105,15 @@ async def process_image_stream(file):
                     mask_np = cv2.resize(mask_np, (img_array.shape[1], img_array.shape[0]), interpolation=cv2.INTER_NEAREST)
                 
                 c = colors[idx % len(colors)]
+                
+                # 1. Draw translucent fill
                 colored_mask = np.zeros_like(sam2_img)
                 colored_mask[mask_np > 127] = c
-                sam2_img = cv2.addWeighted(sam2_img, 1.0, colored_mask, 0.5, 0)
+                sam2_img = cv2.addWeighted(sam2_img, 1.0, colored_mask, 0.4, 0)
+                
+                # 2. Draw crisp contour outline around the real mask shape
+                contours, _ = cv2.findContours(mask_np, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                cv2.drawContours(sam2_img, contours, -1, c, 3)
 
         _, buffer = cv2.imencode('.jpg', sam2_img)
         sam2_b64 = base64.b64encode(buffer).decode('utf-8')
