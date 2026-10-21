@@ -23,8 +23,7 @@ async def process_image(file: UploadFile):
             image_path = temp.name
 
         detected_foods = detect_food(image)
-        if not detected_foods:
-            return {"error": "Food not detected"}
+        if not detected_foods: return {"error": "Food not detected"}
 
         detections = detector.detect(image_path=image_path, labels=[item["search_query"] for item in detected_foods])
         foods_data = detections.get("foods", [])
@@ -33,8 +32,7 @@ async def process_image(file: UploadFile):
         for item in foods_data:
             label = item.get("label", "").strip().lower()
             vol = item.get("volume_cm3")
-            if label and vol:
-                merged[label] = merged.get(label, 0) + vol
+            if label and vol: merged[label] = merged.get(label, 0) + vol
 
         nutrition_results = []
         for item in detected_foods:
@@ -42,7 +40,7 @@ async def process_image(file: UploadFile):
             d = item["density_g_cm3"]
             match = merged.get(q.strip().lower())
             if match:
-                mass = match * d
+                mass = match * d  # REAL MATH, NO CLAMP
                 try:
                     data = search_food(q)
                     if "error" not in data:
@@ -67,53 +65,49 @@ async def process_image_stream(file):
         
         if not detected_foods: return
 
-        yield f"data: {json.dumps({'step': 'dino', 'status': 'running', 'message': 'Running DINO, SAM2, and Depth Pro...'})}\n\n"
+        yield f"data: {json.dumps({'step': 'dino', 'status': 'running', 'message': 'Running DINO, SAM2, and Depth...'})}\n\n"
         detections = detector.detect(image_path=image_path, labels=[item["search_query"] for item in detected_foods])
         foods_data = detections.get("foods", [])
         
-        # Load original image
         img_array = cv2.imread(image_path)
         
-        # 1. Draw DINO Boxes
+        # DINO
         dino_img = img_array.copy()
         for item in foods_data:
             bbox = item.get("bbox")
             if bbox:
                 x1, y1, x2, y2 = map(int, bbox)
                 cv2.rectangle(dino_img, (x1, y1), (x2, y2), (0, 255, 0), 3)
-                cv2.putText(dino_img, item.get("label", "food"), (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
         _, buffer = cv2.imencode('.jpg', dino_img)
         dino_b64 = base64.b64encode(buffer).decode('utf-8')
         yield f"data: {json.dumps({'step': 'dino', 'status': 'done', 'message': 'DINO localized', 'image': dino_b64})}\n\n"
 
-        # 2. SAM2 Mask Overlay
+        # SAM2
         sam2_img = img_array.copy()
-        overlay = sam2_img.copy()
         for item in foods_data:
             bbox = item.get("bbox")
             if bbox:
                 x1, y1, x2, y2 = map(int, bbox)
-                cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 0, 255), -1)
-        alpha = 0.4
-        cv2.addWeighted(overlay, alpha, sam2_img, 1 - alpha, 0, sam2_img)
+                cv2.rectangle(sam2_img, (x1, y1), (x2, y2), (0, 0, 255), 3)
         _, buffer = cv2.imencode('.jpg', sam2_img)
         sam2_b64 = base64.b64encode(buffer).decode('utf-8')
         yield f"data: {json.dumps({'step': 'sam2', 'status': 'done', 'message': 'SAM2 segmented', 'image': sam2_b64})}\n\n"
 
-        # 3. Depth Map
+        # Depth
         depth_img = cv2.applyColorMap(cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY), cv2.COLORMAP_JET)
         _, buffer = cv2.imencode('.jpg', depth_img)
         depth_b64 = base64.b64encode(buffer).decode('utf-8')
         yield f"data: {json.dumps({'step': 'depth', 'status': 'done', 'message': 'Depth map generated', 'image': depth_b64})}\n\n"
 
-        yield f"data: {json.dumps({'step': 'volume', 'status': 'running', 'message': 'Calculating volume...'})}\n\n"
+        # Volume
+        yield f"data: {json.dumps({'step': 'volume', 'status': 'done', 'message': 'Volume calculated'})}\n\n"
         merged = {}
         for item in foods_data:
             label = item.get("label", "").strip().lower()
             vol = item.get("volume_cm3")
             if label and vol: merged[label] = merged.get(label, 0) + vol
-        yield f"data: {json.dumps({'step': 'volume', 'status': 'done', 'message': 'Volume calculated'})}\n\n"
 
+        # Nutrition
         yield f"data: {json.dumps({'step': 'nutrition', 'status': 'running', 'message': 'Fetching FatSecret...'})}\n\n"
         nutrition_results = []
         for item in detected_foods:
@@ -121,7 +115,7 @@ async def process_image_stream(file):
             d = item["density_g_cm3"]
             match = merged.get(q.strip().lower())
             if match:
-                mass = match * d
+                mass = match * d  # REAL MATH
                 try:
                     data = search_food(q)
                     if "error" not in data:
