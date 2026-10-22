@@ -32,6 +32,21 @@ async def process_image(file: UploadFile):
         for item in foods_data:
             label = item.get("label", "").strip().lower()
             vol = item.get("volume_cm3")
+            
+            # SCALE CORRECTION
+            gemma_item = next((g for g in detected_foods if g["search_query"].lower() in label or label in g["search_query"].lower()), None)
+            if gemma_item and "estimated_height_cm" in gemma_item and vol:
+                gemma_h_cm = float(gemma_item["estimated_height_cm"])
+                dbg = item.get("_debug", {})
+                dp_h_m = dbg.get("height_max")
+                
+                if dp_h_m and dp_h_m > 0:
+                    gemma_h_m = gemma_h_cm / 100.0
+                    scale_factor = gemma_h_m / dp_h_m
+                    vol = vol * (scale_factor ** 3)
+                    item["volume_cm3"] = vol
+                    item["scale_factor_applied"] = scale_factor
+
             if label and vol: merged[label] = merged.get(label, 0) + vol
 
         nutrition_results = []
@@ -124,6 +139,21 @@ async def process_image_stream(file):
         for item in foods_data:
             label = item.get("label", "").strip().lower()
             vol = item.get("volume_cm3")
+            
+            # SCALE CORRECTION
+            gemma_item = next((g for g in detected_foods if g["search_query"].lower() in label or label in g["search_query"].lower()), None)
+            if gemma_item and "estimated_height_cm" in gemma_item and vol:
+                gemma_h_cm = float(gemma_item["estimated_height_cm"])
+                dbg = item.get("_debug", {})
+                dp_h_m = dbg.get("height_max")
+                
+                if dp_h_m and dp_h_m > 0:
+                    gemma_h_m = gemma_h_cm / 100.0
+                    scale_factor = gemma_h_m / dp_h_m
+                    vol = vol * (scale_factor ** 3)
+                    item["volume_cm3"] = vol
+                    item["scale_factor_applied"] = scale_factor
+
             if label and vol: merged[label] = merged.get(label, 0) + vol
 
         # Nutrition
