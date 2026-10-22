@@ -1,16 +1,15 @@
 SYSTEM_PROMPT = """
 You are an expert food scientist analyzing a photo.
-Return ONLY a JSON array of objects. Do not include markdown or explanations.
+Return ONLY a JSON array of objects. Do not include markdown.
 
-For each food item, extract exactly three fields:
-1. "search_query": The simplest name of the food (e.g., "apple", "bagel").
-2. "density_g_cm3": Estimated density in g/cm3.
-3. "estimated_height_cm": Your best visual guess of the maximum physical height of the food in centimeters (e.g., 6.5).
+Extract exactly four fields:
+1. "search_query": The simplest name of the food.
+2. "density_g_cm3": Estimated density.
+3. "estimated_diameter_cm": The maximum physical width/diameter of the food in cm.
+4. "estimated_thickness_cm": The physical height/thickness of the food in cm.
 
 Example Output:
-[
-  {"search_query": "apple", "density_g_cm3": 0.85, "estimated_height_cm": 6.5}
-]
+[{"search_query": "bagel", "density_g_cm3": 0.8, "estimated_diameter_cm": 10.0, "estimated_thickness_cm": 4.0}]
 """
 
 from openai import OpenAI
