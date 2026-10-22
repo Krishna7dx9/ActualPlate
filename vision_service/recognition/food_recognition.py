@@ -42,7 +42,10 @@ def _validate_items(items) -> list:
         density = item.get("density_g_cm3")
         if not isinstance(query, str) or not query.strip(): continue
         if not isinstance(density, (int, float)) or density <= 0: continue
+        
+        # Extract height, default to 0.0 if missing
         height = item.get("estimated_height_cm", 0.0)
+        
         valid.append({
             "search_query": query.strip(), 
             "density_g_cm3": float(density),
@@ -52,9 +55,10 @@ def _validate_items(items) -> list:
 
 def detect_food(image_bytes: bytes) -> list:
     image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+    
+    # Note: response_format was removed so it returns a list, not a dict.
     response = client.chat.completions.create(
         model="google/gemma-3-27b-it",
-        response_format={ "type": "json_object" },
         max_tokens=800,
         messages=[
             {
@@ -68,9 +72,11 @@ def detect_food(image_bytes: bytes) -> list:
     )
     content = response.choices[0].message.content
     if not content: return []
+    
     cleaned = _strip_json_fences(content)
     try:
         parsed = json.loads(cleaned)
     except json.JSONDecodeError:
         return []
+        
     return _validate_items(parsed)
