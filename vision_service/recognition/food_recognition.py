@@ -42,13 +42,19 @@ def _validate_items(items) -> list:
         density = item.get("density_g_cm3")
         if not isinstance(query, str) or not query.strip(): continue
         if not isinstance(density, (int, float)) or density <= 0: continue
-        valid.append({"search_query": query.strip(), "density_g_cm3": float(density)})
+        height = item.get("estimated_height_cm", 0.0)
+        valid.append({
+            "search_query": query.strip(), 
+            "density_g_cm3": float(density),
+            "estimated_height_cm": float(height)
+        })
     return valid
 
 def detect_food(image_bytes: bytes) -> list:
     image_base64 = base64.b64encode(image_bytes).decode("utf-8")
     response = client.chat.completions.create(
         model="google/gemma-3-27b-it",
+        response_format={ "type": "json_object" },
         max_tokens=800,
         messages=[
             {
