@@ -42,20 +42,21 @@ def _validate_items(items) -> list:
         if not isinstance(query, str) or not query.strip(): continue
         if not isinstance(density, (int, float)) or density <= 0: continue
         
-        # Extract height, default to 0.0 if missing
-        height = item.get("estimated_height_cm", 0.0)
+        # Extract new fields
+        diam = item.get("estimated_diameter_cm", 10.0)
+        thick = item.get("estimated_thickness_cm", 3.0)
         
         valid.append({
             "search_query": query.strip(), 
             "density_g_cm3": float(density),
-            "estimated_height_cm": float(height)
+            "estimated_diameter_cm": float(diam),
+            "estimated_thickness_cm": float(thick)
         })
     return valid
 
 def detect_food(image_bytes: bytes) -> list:
     image_base64 = base64.b64encode(image_bytes).decode("utf-8")
     
-    # Note: response_format was removed so it returns a list, not a dict.
     response = client.chat.completions.create(
         model="google/gemma-3-27b-it",
         max_tokens=800,
