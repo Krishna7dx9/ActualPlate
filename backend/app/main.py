@@ -6,6 +6,7 @@ from backend.routes.upload import router as upload_router
 
 app = FastAPI()
 
+# Force CORS headers on all successful responses
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,6 +18,7 @@ app.add_middleware(
 app.include_router(nutrition_router)
 app.include_router(upload_router)
 
+# Force CORS headers on all ERROR responses (this fixes the "Failed to fetch")
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     import traceback
@@ -24,5 +26,9 @@ async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal Server Error", "error": str(exc)},
-        headers={"Access-Control-Allow-Origin": "*"}
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
     )
