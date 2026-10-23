@@ -1,225 +1,443 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ActualPlate | Live Pipeline</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { background: #0f0f0f; color: white; font-family: sans-serif; }
-        .code-block { background: #1e1e1e; border: 1px solid #333; border-radius: 8px; }
-        .step-card { border-left: 4px solid #333; background: #1a1a1a; margin-bottom: 10px; padding: 15px; border-radius: 0 8px 8px 0; opacity: 0.4; transition: all 0.3s; }
-        .step-card.active { opacity: 1; border-left-color: #f97316; box-shadow: 0 0 10px rgba(249,115,22,0.1); }
-        .step-card.done { opacity: 1; border-left-color: #22c55e; }
-        .step-img { max-height: 200px; border-radius: 8px; margin-top: 10px; border: 1px solid #333; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a1a1f">
+<title>ActualPlate | Know what’s on your plate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a1a1f; --bg2:#0f262d; --card:rgba(18,44,52,.55); --ink:#f3efe6; --mute:#8ea4a9;
+  --line:rgba(243,239,230,.11); --saffron:#f4b942; --herb:#8fd18b; --chili:#ef6a4c;
+  --serif:'Fraunces',Georgia,serif; --sans:'DM Sans',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{color-scheme:dark}
+body{
+  min-height:100vh;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;
+  background-image:
+    radial-gradient(900px 500px at 12% -10%,rgba(244,185,66,.10),transparent 60%),
+    radial-gradient(800px 600px at 100% 10%,rgba(46,125,140,.22),transparent 60%);
+  background-attachment:fixed;
+  padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);
+}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--saffron);outline-offset:3px}
+
+/* header */
+.top{max-width:1180px;margin:0 auto;padding:22px 24px;display:flex;justify-content:space-between;align-items:center}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--serif);font-size:1.35rem;font-weight:500;letter-spacing:-.01em}
+.brand svg{width:26px;height:26px}
+.json-btn{background:none;border:1px solid var(--line);border-radius:999px;padding:7px 14px;font-size:.82rem;color:var(--mute);transition:.2s}
+.json-btn:hover{color:var(--ink);border-color:rgba(243,239,230,.3)}
+.json-btn[aria-pressed=true]{background:var(--saffron);border-color:var(--saffron);color:#201605;font-weight:600}
+
+/* layout */
+main{max-width:1180px;margin:0 auto;padding:12px 24px 64px;display:grid;gap:48px;grid-template-columns:1fr}
+@media(min-width:980px){main{grid-template-columns:1.05fr .95fr;gap:72px;align-items:start}.pipeline{position:sticky;top:24px}}
+
+.v{display:none}
+[data-state=idle] .v-idle,[data-state=busy] .v-busy,[data-state=done] .v-done{display:block}
+
+h1{font-family:var(--serif);font-weight:500;font-size:clamp(2.4rem,5.2vw,3.9rem);line-height:1.04;letter-spacing:-.025em;max-width:11ch}
+.lede{color:var(--mute);margin-top:18px;max-width:40ch;font-size:1.02rem}
+
+/* the plate */
+.plate-wrap{display:flex;justify-content:center;margin:40px 0 8px}
+.plate{position:relative;width:min(380px,82vw);aspect-ratio:1}
+.plate svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg);overflow:visible}
+.plate circle{fill:none;stroke-linecap:round}
+.track{stroke:var(--line);stroke-width:2}
+.arc{stroke-width:3.4;stroke-dasharray:0 100;transition:stroke-dasharray 1.1s cubic-bezier(.2,.8,.2,1),stroke-dashoffset 1.1s cubic-bezier(.2,.8,.2,1)}
+.scan{stroke:var(--saffron);stroke-width:3.4;stroke-dasharray:22 78;opacity:0;transform-origin:50% 50%}
+[data-state=busy] .scan{opacity:1;animation:spin 1.6s linear infinite}
+[data-state=busy] .track{stroke:rgba(244,185,66,.18)}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.face{
+  position:absolute;inset:9%;border-radius:50%;overflow:hidden;
+  background:radial-gradient(circle at 35% 30%,#173a43 0%,#0e2830 55%,#0b1f25 100%);
+  background-size:cover;background-position:center;
+  box-shadow:inset 0 0 0 1px var(--line),0 30px 60px -20px rgba(0,0,0,.6),inset 0 0 40px rgba(0,0,0,.35);
+}
+.face::after{content:"";position:absolute;inset:0;border-radius:50%;box-shadow:inset 0 0 0 14px rgba(243,239,230,.04)}
+.drop{
+  position:absolute;inset:0;z-index:2;display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  text-align:center;padding:18%;cursor:pointer;border-radius:50%;transition:background .25s;
+}
+[data-state=idle] .drop{display:flex}
+.drop:hover,.drop.over{background:rgba(244,185,66,.08)}
+.drop .ico{width:54px;height:54px;border-radius:50%;display:grid;place-items:center;background:var(--saffron);color:#201605;margin-bottom:6px;transition:transform .25s}
+.drop:hover .ico{transform:scale(1.07)}
+.drop strong{font-family:var(--serif);font-weight:500;font-size:1.25rem}
+.drop span{color:var(--mute);font-size:.85rem}
+.plate.over .track{stroke:var(--saffron)}
+[data-state=busy] .face img{filter:saturate(.7) brightness(.8)}
+
+/* result */
+.result{margin-top:28px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+.chip{border:1px solid var(--line);background:none;border-radius:999px;padding:6px 14px;font-size:.85rem;color:var(--mute);transition:.2s}
+.chip[aria-pressed=true]{background:var(--ink);color:#0a1a1f;border-color:var(--ink);font-weight:600}
+.result h2{font-family:var(--serif);font-weight:500;font-size:2rem;letter-spacing:-.02em;text-transform:capitalize}
+.sub{color:var(--mute);font-size:.95rem}
+.sub b{color:var(--ink);font-weight:600}
+.cal{display:flex;align-items:baseline;gap:8px;margin:18px 0 26px}
+.cal #valCalories{font-family:var(--serif);font-weight:400;font-size:clamp(4rem,9vw,6rem);line-height:.9;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.cal small{color:var(--mute);font-size:1.1rem}
+.macros{list-style:none;display:grid;gap:18px}
+.macros li{display:grid;grid-template-columns:12px 1fr auto;gap:4px 12px;align-items:center}
+.dot{width:10px;height:10px;border-radius:50%}
+.macros b{font-weight:600;font-variant-numeric:tabular-nums}
+.macros b em{font-style:normal;color:var(--mute);font-weight:400;font-size:.85rem;margin-left:2px}
+.bar{grid-column:1/-1;height:4px;border-radius:4px;background:var(--line);overflow:hidden}
+.bar u{display:block;height:100%;width:0;border-radius:4px;transition:width 1s cubic-bezier(.2,.8,.2,1)}
+.btn{margin-top:32px;border:1px solid var(--line);background:rgba(243,239,230,.06);border-radius:14px;padding:13px 22px;font-weight:600;transition:.2s}
+.btn:hover{background:var(--ink);color:#0a1a1f}
+
+.err{display:none;margin-top:24px;border:1px solid rgba(239,106,76,.4);background:rgba(239,106,76,.08);border-radius:14px;padding:16px 18px}
+.err.show{display:block}
+.err p{color:#f5b4a5;font-size:.92rem;margin-bottom:12px}
+
+/* pipeline */
+.pipeline{border:1px solid var(--line);background:var(--card);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:26px;padding:26px 26px 14px;opacity:.55;transition:opacity .4s}
+[data-state=busy] .pipeline,[data-state=done] .pipeline{opacity:1}
+.ph{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:22px}
+.ph h3{font-family:var(--serif);font-weight:500;font-size:1.3rem}
+.ph span{color:var(--mute);font-size:.85rem;font-variant-numeric:tabular-nums}
+.steps{list-style:none}
+.step{position:relative;display:grid;grid-template-columns:28px 1fr;gap:0 16px;padding-bottom:22px}
+.step::before{content:"";position:absolute;left:13px;top:28px;bottom:-2px;width:2px;background:var(--line);transition:background .5s}
+.step:last-child::before{display:none}
+.step.done::before{background:var(--saffron)}
+.node{width:28px;height:28px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;background:var(--bg2);transition:.35s;position:relative;z-index:1}
+.node .sp,.node .ck{display:none}
+.step.active .node{border-color:var(--saffron)}
+.step.active .sp{display:block;width:12px;height:12px;border:2px solid rgba(244,185,66,.25);border-top-color:var(--saffron);border-radius:50%;animation:spin .8s linear infinite}
+.step.done .node{background:var(--saffron);border-color:var(--saffron);color:#201605}
+.step.done .ck{display:block}
+.st{font-weight:600;font-size:.98rem;color:var(--mute);transition:color .3s}
+.step.active .st,.step.done .st{color:var(--ink)}
+.model{font-size:.78rem;color:var(--mute);margin-left:8px;font-weight:400}
+.msg{font-size:.85rem;color:var(--mute);margin-top:2px}
+.step img{display:none;width:100%;max-height:190px;object-fit:cover;border-radius:14px;margin-top:12px;border:1px solid var(--line)}
+.step img.show{display:block;animation:reveal .6s ease-out}
+.step pre{display:none;margin-top:10px;padding:12px;border-radius:12px;background:rgba(0,0,0,.28);color:var(--saffron);font-size:.78rem;overflow-x:auto;max-height:150px}
+.step pre.show{display:block}
+@keyframes reveal{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
+
+.json{grid-column:1/-1;display:none;border:1px solid var(--line);border-radius:18px;background:rgba(0,0,0,.3);padding:16px 18px}
+.json.show{display:block}
+.json header{display:flex;justify-content:space-between;color:var(--mute);font-size:.8rem;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.json pre{color:var(--herb);font-size:.78rem;overflow:auto;max-height:260px}
+
+html{-webkit-text-size-adjust:100%}
+body{-webkit-tap-highlight-color:transparent;overflow-x:hidden}
+.top,main{padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right))}
+.plate{scroll-margin-top:12px}
+.actions{display:none;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:28px}
+[data-state=idle] .actions{display:flex}
+.act{min-height:48px;border-radius:14px;padding:0 24px;font-weight:600;border:1px solid var(--line);background:rgba(243,239,230,.06);transition:.2s}
+.act:hover{background:rgba(243,239,230,.14)}
+.act.main{background:var(--saffron);border-color:var(--saffron);color:#201605}
+.act.main:hover{background:#f7c765}
+.live{margin:24px auto 0;max-width:380px;text-align:center}
+.live p{font-size:.95rem;min-height:1.5em}
+.lbar{height:4px;border-radius:4px;background:var(--line);margin-top:12px;overflow:hidden}
+.lbar u{display:block;height:100%;width:4%;background:var(--saffron);border-radius:4px;transition:width .6s ease}
+@media(min-width:980px){[data-state=busy] .live{display:none}}
+.btn,.json-btn{min-height:44px}
+.chip{min-height:40px}
+.foot{max-width:1180px;margin:0 auto;padding:0 24px 40px;color:var(--mute);font-size:.8rem;text-align:center;line-height:1.6}
+@media(max-width:600px){
+  main{gap:32px;padding-bottom:40px}
+  .plate-wrap{margin:28px 0 4px}
+  .drop{padding:14%}.drop strong{font-size:1.1rem}
+  .pipeline{padding:20px 18px 6px;border-radius:22px}
+  .result h2{font-size:1.7rem}
+  .btn{width:100%}
+}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
 </head>
-<body class="min-h-screen p-6">
-    <nav class="flex justify-between items-center max-w-7xl mx-auto w-full border-b border-gray-800 pb-4 mb-8">
-        <div class="text-2xl font-bold"><span class="text-orange-500">◉</span> ActualPlate</div>
-        <label class="flex items-center cursor-pointer">
-            <span class="mr-3 text-sm text-gray-400">Show Live Pipeline</span>
-            <div class="relative">
-                <input type="checkbox" id="debugToggle" class="sr-only" checked>
-                <div class="block bg-orange-500 w-10 h-6 rounded-full transition"></div>
-                <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition translate-x-4"></div>
-            </div>
-        </label>
-    </nav>
+<body>
 
-    <main class="flex flex-col lg:flex-row max-w-7xl mx-auto w-full gap-8">
-        <div class="w-full lg:w-1/3">
-            <h1 class="text-3xl font-bold mb-4">Food Intelligence API</h1>
-            <p class="text-gray-400 mb-6">Upload a photo to watch the AI pipeline execute live.</p>
-            <div class="border-2 border-dashed border-gray-600 rounded-xl p-8 text-center hover:border-orange-500 cursor-pointer" onclick="document.getElementById('fileInput').click()">
-                <input type="file" id="fileInput" class="hidden" accept="image/*" onchange="handleUpload(event)">
-                <p class="text-gray-300">Click to upload a food photo</p>
-            </div>
+<header class="top">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><circle cx="16" cy="16" r="14" stroke="#f3efe6" stroke-opacity=".35" stroke-width="2"/><circle cx="16" cy="16" r="8.5" fill="#f4b942"/></svg>
+    ActualPlate
+  </div>
+  <button class="json-btn" id="debugToggle" aria-pressed="false">Raw data</button>
+</header>
+
+<main id="stage" data-state="idle">
+
+  <section>
+    <div class="v v-idle">
+      <h1>Know what’s actually on your plate.</h1>
+      <p class="lede">Photograph a meal. We measure the portion in 3D and return calories and macros in seconds.</p>
+    </div>
+    <div class="v v-busy">
+      <h1>Reading your plate.</h1>
+      <p class="lede">Identifying the food, measuring its size, and looking up nutrition. This takes a few seconds.</p>
+    </div>
+
+    <div class="plate-wrap">
+      <div class="plate" id="plate">
+        <svg viewBox="0 0 100 100" aria-hidden="true">
+          <circle class="track" cx="50" cy="50" r="46" pathLength="100"/>
+          <circle class="arc" id="arcP" cx="50" cy="50" r="46" pathLength="100" stroke="#8fd18b"/>
+          <circle class="arc" id="arcC" cx="50" cy="50" r="46" pathLength="100" stroke="#f4b942"/>
+          <circle class="arc" id="arcF" cx="50" cy="50" r="46" pathLength="100" stroke="#ef6a4c"/>
+          <circle class="scan" cx="50" cy="50" r="46" pathLength="100"/>
+        </svg>
+        <div class="face" id="face">
+          <label class="drop" id="drop" for="galleryInput">
+            <span class="ico"><svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 9a2 2 0 012-2h.9a2 2 0 001.7-.9l.8-1.2A2 2 0 0110.1 4h3.8a2 2 0 011.7.9l.8 1.2a2 2 0 001.7.9H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3.2"/></svg></span>
+            <strong>Add a meal photo</strong>
+            <span>Take one, or drop an image here</span>
+          </label>
         </div>
+      </div>
+      <input type="file" id="fileInput" hidden accept="image/*" capture="environment">
+      <input type="file" id="galleryInput" hidden accept="image/*">
+    </div>
 
-        <div class="w-full lg:w-2/3" id="pipelineContainer" style="display: none;">
-            <div id="step-gemma" class="step-card">
-                <h3 class="font-bold text-lg mb-1">🍎 1. Gemma (Food Recognition)</h3>
-                <p class="text-sm text-gray-400" id="msg-gemma">Waiting...</p>
-                <pre id="data-gemma" class="text-xs text-green-400 mt-2 hidden overflow-x-auto"></pre>
-            </div>
-            <div id="step-dino" class="step-card">
-                <h3 class="font-bold text-lg mb-1">🎯 2. Grounding DINO (Localization)</h3>
-                <p class="text-sm text-gray-400" id="msg-dino">Waiting...</p>
-<img id="img-dino" class="step-img hidden" />
-            </div>
-            <div id="step-sam2" class="step-card">
-                <h3 class="font-bold text-lg mb-1">✂️ 3. SAM2 (Segmentation)</h3>
-                <p class="text-sm text-gray-400" id="msg-sam2">Waiting...</p>
-<img id="img-sam2" class="step-img hidden" />
-            </div>
-            <div id="step-depth" class="step-card">
-                <h3 class="font-bold text-lg mb-1">🏔️ 4. Depth Pro (3D Geometry)</h3>
-                <p class="text-sm text-gray-400" id="msg-depth">Waiting...</p>
-<img id="img-depth" class="step-img hidden" />
-            </div>
-            <div id="step-volume" class="step-card">
-                <h3 class="font-bold text-lg mb-1">📐 5. Volume Math</h3>
-                <p class="text-sm text-gray-400" id="msg-volume">Waiting...</p>
-            </div>
-            <div id="step-nutrition" class="step-card">
-                <h3 class="font-bold text-lg mb-1">🥗 6. FatSecret (Nutrition)</h3>
-                <p class="text-sm text-gray-400" id="msg-nutrition">Waiting...</p>
-            </div>
-            <div class="code-block p-4 mt-6">
-                <div class="flex justify-between border-b border-gray-700 pb-2 mb-2">
-                    <span class="text-gray-400 text-sm">Final API Response</span>
-                    <span id="statusCode" class="text-gray-500 text-xs">Pending</span>
-                </div>
-                <pre id="jsonOutput" class="text-sm font-mono text-gray-300 overflow-x-auto max-h-60">// Waiting for pipeline to finish...</pre>
-            </div>
-        </div>
-    </main>
+    <div class="actions">
+      <button class="act main" id="camBtn" onclick="document.getElementById('fileInput').click()">Take a photo</button>
+      <button class="act" onclick="document.getElementById('galleryInput').click()">Choose a photo</button>
+    </div>
 
-    <script>
-        const API_URL = "{{API_URL}}"; 
-        const toggle = document.getElementById('debugToggle');
-        
-        toggle.addEventListener('change', (e) => {
-            const dot = e.target.nextElementSibling.nextElementSibling;
-            const bg = e.target.nextElementSibling;
-            if(e.target.checked) {
-                bg.classList.replace('bg-gray-600', 'bg-orange-500');
-                dot.classList.add('translate-x-4');
-            } else {
-                bg.classList.replace('bg-orange-500', 'bg-gray-600');
-                dot.classList.remove('translate-x-4');
-            }
-        });
+    <div class="live v v-busy" aria-live="polite"><p id="liveMsg">Uploading your photo…</p><div class="lbar"><u id="liveBar"></u></div></div>
 
-        async function handleUpload(event) {
-            const file = event.target.files[0];
-            if (!file) return;
+    <div class="err" id="err" role="alert">
+      <p id="errMsg">Something went wrong.</p>
+      <button class="btn" style="margin:0" onclick="resetUI()">Try another photo</button>
+    </div>
 
-            const showDebug = toggle.checked;
-            const endpoint = showDebug ? API_URL.replace('/upload-image', '/upload-image-stream') : API_URL;
-            
-            document.getElementById('jsonOutput').innerText = "// Connecting to backend...";
-            document.getElementById('statusCode').innerText = "POST";
-            document.getElementById('statusCode').className = "text-orange-400 text-xs";
-            
-            if (showDebug) {
-                document.getElementById('pipelineContainer').style.display = "block";
-                ['gemma', 'dino', 'sam2', 'depth', 'volume', 'nutrition'].forEach(step => {
-                    const el = document.getElementById(`step-${step}`);
-                    el.className = 'step-card';
-                    document.getElementById(`msg-${step}`).innerText = "Waiting...";
-                    const data = document.getElementById(`data-${step}`);
-                    if(data) data.classList.add('hidden');
-                });
-            } else {
-                document.getElementById('pipelineContainer').style.display = "none";
-            }
+    <div class="result v v-done" id="result">
+      <div class="chips" id="chips"></div>
+      <h2 id="foodName">Banana</h2>
+      <p class="sub">About <b id="foodMass">0 g</b> on the plate</p>
+      <div class="cal"><span id="valCalories">0</span><small>kcal</small></div>
+      <ul class="macros">
+        <li><i class="dot" style="background:var(--herb)"></i><span>Protein</span><b id="valProtein">0</b><div class="bar"><u id="barP" style="background:var(--herb)"></u></div></li>
+        <li><i class="dot" style="background:var(--saffron)"></i><span>Carbohydrates</span><b id="valCarbs">0</b><div class="bar"><u id="barC" style="background:var(--saffron)"></u></div></li>
+        <li><i class="dot" style="background:var(--chili)"></i><span>Fat</span><b id="valFat">0</b><div class="bar"><u id="barF" style="background:var(--chili)"></u></div></li>
+      </ul>
+      <button class="btn" onclick="resetUI()">Scan another meal</button>
+    </div>
+  </section>
 
-            const formData = new FormData();
-            formData.append("file", file);
+  <aside class="pipeline" id="pipelineContainer" aria-live="polite">
+    <div class="ph"><h3>Analysis</h3><span id="progress">0 of 6 complete</span></div>
+    <ol class="steps">
+      <li class="step" id="step-gemma"><div class="node"><i class="sp"></i><svg class="ck" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></div>
+        <div><div class="st">Recognize food<span class="model">Gemma</span></div><p class="msg" id="msg-gemma">Waiting to start</p><pre id="data-gemma"></pre></div></li>
+      <li class="step" id="step-dino"><div class="node"><i class="sp"></i><svg class="ck" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></div>
+        <div><div class="st">Locate each item<span class="model">Grounding DINO</span></div><p class="msg" id="msg-dino">Waiting</p><img id="img-dino" alt="Detected food regions"></div></li>
+      <li class="step" id="step-sam2"><div class="node"><i class="sp"></i><svg class="ck" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></div>
+        <div><div class="st">Cut out the food<span class="model">SAM2</span></div><p class="msg" id="msg-sam2">Waiting</p><img id="img-sam2" alt="Segmented food"></div></li>
+      <li class="step" id="step-depth"><div class="node"><i class="sp"></i><svg class="ck" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></div>
+        <div><div class="st">Measure depth<span class="model">Depth Pro</span></div><p class="msg" id="msg-depth">Waiting</p><img id="img-depth" alt="Depth map"></div></li>
+      <li class="step" id="step-volume"><div class="node"><i class="sp"></i><svg class="ck" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></div>
+        <div><div class="st">Calculate portion size</div><p class="msg" id="msg-volume">Waiting</p></div></li>
+      <li class="step" id="step-nutrition"><div class="node"><i class="sp"></i><svg class="ck" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></div>
+        <div><div class="st">Look up nutrition<span class="model">FatSecret</span></div><p class="msg" id="msg-nutrition">Waiting</p></div></li>
+    </ol>
+  </aside>
 
-            try {
-                const response = await fetch(endpoint, { method: "POST", body: formData });
-                
-                if (showDebug) {
-                    const reader = response.body.getReader();
-                    const decoder = new TextDecoder();
-                    let buffer = "";
-                    
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        
-                        buffer += decoder.decode(value, { stream: true });
-                        const lines = buffer.split('\n\n');
-                        buffer = lines.pop(); 
-                        
-                        for (const line of lines) {
-                            if (line.startsWith('data: ')) {
-                                const data = JSON.parse(line.substring(6));
-                                updateStep(data);
-                            }
-                        }
-                    }
-                } else {
-                    const data = await response.json();
-                    document.getElementById('jsonOutput').innerText = JSON.stringify(data, null, 2);
-                }
+  <section class="json" id="jsonContainer">
+    <header><span>API response</span><span id="statusCode">Idle</span></header>
+    <pre id="jsonOutput">// Waiting for a scan</pre>
+  </section>
+</main>
 
-                document.getElementById('statusCode').innerText = "200 OK";
-                document.getElementById('statusCode').className = "text-green-400 text-xs";
+<footer class="foot">Estimates from a single photo, so treat them as a close guide, not a lab measurement.<br>Built with Gemma, Grounding DINO, SAM2, Depth Pro and FatSecret.</footer>
 
-            } catch (error) {
-                document.getElementById('jsonOutput').innerText = `Error: ${error.message}`;
-                document.getElementById('statusCode').innerText = "FAILED";
-                document.getElementById('statusCode').className = "text-red-500 text-xs";
-            }
-        }
+<script>
+const API_URL = "https://api.actualplate.tech/upload-image-stream";
+const STEPS = ['gemma','dino','sam2','depth','volume','nutrition'];
+const $ = id => document.getElementById(id);
+const num = v => Number(v) || 0;
+let foods = [], doneSet = new Set(), photoURL = null, raf = null;
 
-        function updateStep(data) {
-            if (data.step === 'error') {
-                document.getElementById('jsonOutput').innerText = `Error: ${data.message}`;
-                return;
-            }
+const setState = s => $('stage').dataset.state = s;
 
-            const stepId = data.step;
-            const card = document.getElementById(`step-${stepId}`);
-            const msg = document.getElementById(`msg-${stepId}`);
-            
-            if (card) {
-                card.className = data.status === 'running' ? 'step-card active' : 'step-card done';
-                msg.innerText = data.message;
-            }
+/* raw data toggle */
+$('debugToggle').addEventListener('click', e => {
+  const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
+  e.currentTarget.setAttribute('aria-pressed', on);
+  $('jsonContainer').classList.toggle('show', on);
+});
 
-            if (data.image) {
-                const img = document.getElementById(`img-${stepId}`);
-                if(img) {
-                    img.src = "data:image/jpeg;base64," + data.image;
-                    img.classList.remove('hidden');
-                }
-            }
+/* upload: click, camera, drag and drop */
+['fileInput','galleryInput'].forEach(id => $(id).addEventListener('change', e => handleUpload(e.target.files[0])));
+['dragenter','dragover'].forEach(t => $('plate').addEventListener(t, e => { if ($('stage').dataset.state !== 'idle') return; e.preventDefault(); $('drop').classList.add('over'); $('plate').classList.add('over'); }));
+['dragleave','drop'].forEach(t => $('plate').addEventListener(t, e => { e.preventDefault(); $('drop').classList.remove('over'); $('plate').classList.remove('over'); }));
+$('plate').addEventListener('drop', e => { if ($('stage').dataset.state !== 'idle') return; const f = e.dataTransfer.files[0]; if (f && f.type.startsWith('image/')) handleUpload(f); });
 
-            if (data.data && stepId === 'gemma') {
-                const pre = document.getElementById(`data-gemma`);
-                pre.innerText = JSON.stringify(data.data, null, 2);
-                pre.classList.remove('hidden');
-            }
+function resetUI() {
+  setState('idle');
+  $('err').classList.remove('show');
+  doneSet.clear(); foods = [];
+  $('progress').textContent = '0 of 6 complete';
+  STEPS.forEach(s => {
+    $('step-' + s).className = 'step';
+    $('msg-' + s).textContent = s === 'gemma' ? 'Waiting to start' : 'Waiting';
+    const img = $('img-' + s); if (img) { img.classList.remove('show'); img.removeAttribute('src'); }
+    const pre = $('data-' + s); if (pre) { pre.classList.remove('show'); pre.textContent = ''; }
+  });
+  ['arcP','arcC','arcF'].forEach(id => $(id).style.strokeDasharray = '0 100');
+  ['barP','barC','barF'].forEach(id => $(id).style.width = '0');
+  $('face').style.backgroundImage = '';
+  const old = $('face').querySelector('img'); if (old) old.remove();
+  if (photoURL) { URL.revokeObjectURL(photoURL); photoURL = null; }
+  $('fileInput').value = ''; $('galleryInput').value = '';
+  $('liveMsg').textContent = 'Uploading your photo…'; $('liveBar').style.width = '4%';
+  $('statusCode').textContent = 'Idle';
+  $('jsonOutput').textContent = '// Waiting for a scan';
+}
 
-            if (data.final) {
-                document.getElementById('jsonOutput').innerText = JSON.stringify(data.final, null, 2);
-            }
-        }
-    </script>
+async function handleUpload(file) {
+  if (!file) return;
+  photoURL = URL.createObjectURL(file);
+  const img = document.createElement('img');
+  img.src = photoURL; img.alt = 'Your meal';
+  img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:filter .6s';
+  $('face').prepend(img);
+  setState('busy');
+  $('err').classList.remove('show');
+  $('jsonOutput').textContent = '// Connecting to backend...';
+  $('statusCode').textContent = 'POST';
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 150000);
+    const response = await fetch(API_URL, { method: 'POST', body: formData, signal: ctrl.signal });
+    if (!response.ok) throw new Error('Server error ' + response.status);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split(/\r?\n\r?\n/);
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (line.startsWith('data: ')) updateStep(JSON.parse(line.substring(6)));
+      }
+    }
+    clearTimeout(timer);
+    if (buffer.startsWith('data: ')) { try { updateStep(JSON.parse(buffer.substring(6))); } catch (_) {} }
+    $('statusCode').textContent = '200 OK';
+    if ($('stage').dataset.state === 'busy') throw new Error('The analysis finished without a result.');
+  } catch (error) {
+    $('jsonOutput').textContent = 'Error: ' + error.message;
+    $('statusCode').textContent = 'Failed';
+    $('errMsg').textContent = 'We couldn’t analyze that photo. Check your connection and try again. (' + (error.name === 'AbortError' ? 'The request timed out' : error.message) + ')';
+    $('err').classList.add('show');
+    setState('error');
+  }
+}
+
+function updateStep(data) {
+  if (data.step === 'error') {
+    $('jsonOutput').textContent = 'Error: ' + data.message;
+    $('errMsg').textContent = data.message || 'The analysis failed.';
+    $('err').classList.add('show');
+    setState('error');
+    return;
+  }
+  const id = data.step, card = $('step-' + id);
+  if (card) {
+    if (data.status === 'running') card.classList.add('active');
+    else if (data.status === 'done') {
+      card.classList.remove('active'); card.classList.add('done');
+      doneSet.add(id);
+      $('progress').textContent = doneSet.size + ' of 6 complete';
+    }
+    $('msg-' + id).textContent = data.message;
+    if (data.message) $('liveMsg').textContent = data.message;
+    $('liveBar').style.width = Math.max(4, (doneSet.size + (data.status === 'running' ? .4 : 0)) / 6 * 100) + '%';
+  }
+  if (data.image) {
+    const img = $('img-' + id);
+    if (img) { img.src = 'data:image/jpeg;base64,' + data.image; img.classList.add('show'); }
+  }
+  if (data.data && id === 'gemma') {
+    const pre = $('data-gemma');
+    pre.textContent = JSON.stringify(data.data, null, 2);
+    pre.classList.add('show');
+  }
+  if (data.final) {
+    $('jsonOutput').textContent = JSON.stringify(data.final, null, 2);
+    if (data.final.foods && data.final.foods.length) {
+      foods = data.final.foods;
+      buildChips();
+      setState('done');
+      showFood(0);
+      if (innerWidth < 980) setTimeout(() => $('plate').scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+    }
+  }
+}
+
+function buildChips() {
+  const box = $('chips');
+  box.innerHTML = '';
+  if (foods.length < 2) return;
+  foods.forEach((f, i) => {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.textContent = f.food_name;
+    b.setAttribute('aria-pressed', i === 0);
+    b.onclick = () => { [...box.children].forEach((c, j) => c.setAttribute('aria-pressed', j === i)); showFood(i); };
+    box.appendChild(b);
+  });
+}
+
+function showFood(i) {
+  const f = foods[i], n = f.nutrition || {};
+  const cal = num(n.calories), p = num(n.protein), c = num(n.carbohydrate), fat = num(n.fat);
+  $('foodName').textContent = f.food_name;
+  $('foodMass').textContent = num(f.mass_g).toFixed(0) + ' g';
+  $('valProtein').innerHTML = p.toFixed(1) + '<em>g</em>';
+  $('valCarbs').innerHTML = c.toFixed(1) + '<em>g</em>';
+  $('valFat').innerHTML = fat.toFixed(1) + '<em>g</em>';
+
+  // count up calories
+  cancelAnimationFrame(raf);
+  const t0 = performance.now(), dur = 900;
+  const tick = t => {
+    const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+    $('valCalories').textContent = Math.round(cal * e);
+    if (k < 1) raf = requestAnimationFrame(tick);
+  };
+  raf = requestAnimationFrame(tick);
+
+  // macro ring: share of calories from each macro
+  const kp = p * 4, kc = c * 4, kf = fat * 9, total = (kp + kc + kf) || 1;
+  let cum = 0;
+  [['arcP', kp], ['arcC', kc], ['arcF', kf]].forEach(([id, k]) => {
+    const share = k / total * 100, len = Math.max(0, share - (share > 2 ? 1.6 : 0));
+    const el = $(id);
+    el.style.strokeDashoffset = -cum;
+    requestAnimationFrame(() => el.style.strokeDasharray = len.toFixed(2) + ' ' + (100 - len).toFixed(2));
+    cum += share;
+  });
+
+  // bars scaled to the largest macro by weight
+  const max = Math.max(p, c, fat) || 1;
+  $('barP').style.width = (p / max * 100) + '%';
+  $('barC').style.width = (c / max * 100) + '%';
+  $('barF').style.width = (fat / max * 100) + '%';
+}
+</script>
 </body>
 </html>
-
-<!-- Trigger rebuild 10/21/2026 18:07:41 -->
-
-<!-- Trigger rebuild for new backend URL 10/21/2026 18:25:00 -->
-
-<!-- Trigger rebuild for final live URL 10/21/2026 18:57:09 -->
-
-<!-- Trigger rebuild for real math -->
-
-<!-- Trigger rebuild for images 10/21/2026 19:33:48 -->
-
-<!-- Trigger rebuild for final test 10/21/2026 21:36:09 -->
-
-<!-- Trigger rebuild with new URL 10/21/2026 21:41:35 -->
-
-<!-- Force free preview rebuild 2026-10-21 21:43:34 -->
-
-<!-- Force rebuild with new Kaggle URL 10/21/2026 22:00:22 -->
-
-<!-- Rebuild for bbox 10/21/2026 22:42:14 -->
-
-<!-- Rebuild for real masks -->
-
-<!-- Final real depth rebuild -->
-
-<!-- Rebuild for clean UI 10/22/2026 01:21:24 -->
-
-<!-- Rebuild for final UI test 10/22/2026 01:38:27 -->
-
-<!-- Rebuild for final UI test 10/22/2026 01:55:42 -->
