@@ -1,15 +1,9 @@
-from fastapi import APIRouter, UploadFile, File
-from fastapi.responses import StreamingResponse
-from backend.services.pipeline import process_image, process_image_stream
-
-
-from fastapi import APIRouter, File, UploadFile, Response
+from fastapi import APIRouter, UploadFile, File, Response
 from fastapi.responses import StreamingResponse
 from backend.services.pipeline import process_image, process_image_stream
 
 router = APIRouter()
 
-# Handle CORS Preflight
 @router.options("/upload-image")
 async def options_upload():
     return Response(headers={
@@ -26,10 +20,19 @@ async def options_stream():
         "Access-Control-Allow-Headers": "*",
     })
 
-
 @router.post("/upload-image-stream")
 async def upload_image_stream(file: UploadFile = File(...)):
-    return StreamingResponse(process_image_stream(file), media_type="text/event-stream")
+    # Explicit CORS headers + X-Accel-Buffering to prevent Cloudflare from buffering the stream
+    return StreamingResponse(
+        process_image_stream(file),
+        media_type="text/event-stream",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 @router.post("/upload-image")
 async def upload_image(file: UploadFile = File(...)):
