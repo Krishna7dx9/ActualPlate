@@ -220,3 +220,10 @@ benchmarks/ablation/results/*.csv
 _filter_check.py
 _verify.py
 benchmarks/
+_one_diag.py
+_table.py
+_test_actual_code.py
+_test_real_gemma.py
+_ultimate_diag.py
+benchmark_100_remote.py
+test_2_local.py
