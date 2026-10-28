@@ -25,32 +25,25 @@ async def process_image(file: UploadFile):
         detected_foods = detect_food(image)
         if not detected_foods: return {"error": "Food not detected"}
 
-        detections = detector.detect(image_path=image_path, labels=[item["search_query"] for item in detected_foods])
+        # Pass Gemma's real-world scale to the Vision Worker for the 3D math
+        thickness = detected_foods[0].get("estimated_thickness_cm") if detected_foods else None
+        diameter = detected_foods[0].get("estimated_diameter_cm") if detected_foods else None
+        
+        detections = detector.detect(
+            image_path=image_path, 
+            labels=[item["search_query"] for item in detected_foods],
+            estimated_thickness_cm=thickness,
+            estimated_diameter_cm=diameter
+        )
         foods_data = detections.get("foods", [])
 
+        # The Vision Worker has already calculated the 3D Volume. We just aggregate it.
         merged = {}
         for item in foods_data:
             label = item.get("label", "").strip().lower()
             vol = item.get("volume_cm3", 0.0)
-            
-            # PIXEL-TO-REAL-WORLD SCALE CORRECTION
-            gemma_item = next((g for g in detected_foods if g["search_query"].lower() in label or label in g["search_query"].lower()), None)
-            if gemma_item and "estimated_diameter_cm" in gemma_item:
-                est_diam_cm = gemma_item["estimated_diameter_cm"]
-                est_thick_cm = gemma_item["estimated_thickness_cm"]
-                
-                bbox = item.get("bbox", [0,0,0,0])
-                bbox_w_px = max(1.0, bbox[2] - bbox[0])
-                mask_px = max(1.0, item.get("mask_pixels", 1.0))
-                
-                cm_per_px = est_diam_cm / bbox_w_px
-                area_cm2 = mask_px * (cm_per_px ** 2)
-                vol = area_cm2 * est_thick_cm
-                
-                item["volume_cm3"] = vol
-                item["scale_factor_applied"] = cm_per_px
-
-            if label and vol: merged[label] = merged.get(label, 0) + vol
+            if label and vol: 
+                merged[label] = merged.get(label, 0) + vol
 
         nutrition_results = []
         for item in detected_foods:
@@ -68,7 +61,7 @@ async def process_image(file: UploadFile):
         return {
             "foods": nutrition_results, 
             "geometry": foods_data,
-            "vlm_output": detected_foods, # <--- CRUCIAL FIX
+            "vlm_output": detected_foods,
             "total_detected": len(foods_data), 
             "total_nutrition": aggregate_nutrition(nutrition_results)
         }
@@ -89,8 +82,18 @@ async def process_image_stream(file):
         
         if not detected_foods: return
 
-        yield f"data: {json.dumps({'step': 'dino', 'status': 'running', 'message': 'Running DINO, SAM2, and Depth...'})}\n\n"
-        detections = detector.detect(image_path=image_path, labels=[item["search_query"] for item in detected_foods])
+        yield f"data: {json.dumps({'step': 'dino', 'status': 'running', 'message': 'Running DINO, SAM2, and 3D Math...'})}\n\n"
+        
+        # Pass Gemma's scale to the worker
+        thickness = detected_foods[0].get("estimated_thickness_cm") if detected_foods else None
+        diameter = detected_foods[0].get("estimated_diameter_cm") if detected_foods else None
+        
+        detections = detector.detect(
+            image_path=image_path, 
+            labels=[item["search_query"] for item in detected_foods],
+            estimated_thickness_cm=thickness,
+            estimated_diameter_cm=diameter
+        )
         foods_data = detections.get("foods", [])
         
         img_array = cv2.imread(image_path)
@@ -131,37 +134,21 @@ async def process_image_stream(file):
         sam2_b64 = base64.b64encode(buffer).decode('utf-8')
         yield f"data: {json.dumps({'step': 'sam2', 'status': 'done', 'message': 'SAM2 segmented', 'image': sam2_b64})}\n\n"
 
-        # Depth
+        # Depth (LEAVE AS IS FOR THIS BRANCH - we will fix UI later)
         depth_img = cv2.applyColorMap(cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY), cv2.COLORMAP_JET)
         _, buffer = cv2.imencode('.jpg', depth_img)
         depth_b64 = base64.b64encode(buffer).decode('utf-8')
         yield f"data: {json.dumps({'step': 'depth', 'status': 'done', 'message': 'Depth map generated', 'image': depth_b64})}\n\n"
 
-        # Volume
+        # Volume (Already calculated by the Vision Worker, we just aggregate)
         yield f"data: {json.dumps({'step': 'volume', 'status': 'done', 'message': 'Volume calculated'})}\n\n"
+        
         merged = {}
         for item in foods_data:
             label = item.get("label", "").strip().lower()
             vol = item.get("volume_cm3", 0.0)
-            
-            # PIXEL-TO-REAL-WORLD SCALE CORRECTION
-            gemma_item = next((g for g in detected_foods if g["search_query"].lower() in label or label in g["search_query"].lower()), None)
-            if gemma_item and "estimated_diameter_cm" in gemma_item:
-                est_diam_cm = gemma_item["estimated_diameter_cm"]
-                est_thick_cm = gemma_item["estimated_thickness_cm"]
-                
-                bbox = item.get("bbox", [0,0,0,0])
-                bbox_w_px = max(1.0, bbox[2] - bbox[0])
-                mask_px = max(1.0, item.get("mask_pixels", 1.0))
-                
-                cm_per_px = est_diam_cm / bbox_w_px
-                area_cm2 = mask_px * (cm_per_px ** 2)
-                vol = area_cm2 * est_thick_cm
-                
-                item["volume_cm3"] = vol
-                item["scale_factor_applied"] = cm_per_px
-
-            if label and vol: merged[label] = merged.get(label, 0) + vol
+            if label and vol: 
+                merged[label] = merged.get(label, 0) + vol
 
         # Nutrition
         yield f"data: {json.dumps({'step': 'nutrition', 'status': 'running', 'message': 'Fetching FatSecret...'})}\n\n"
