@@ -173,7 +173,7 @@ async def detect(
                     
                     if max_d > min_d:
                         # 1. Normalize to 0-1 (Compresses the shape)
-                        normalized = (result.depth_map - min_d) / (max_d - min_d)
+                        normalized = (max_d - result.depth_map) / (max_d - min_d)
                         normalized = np.clip(normalized, 0, 1)
                     else:
                         normalized = np.zeros_like(result.depth_map)
