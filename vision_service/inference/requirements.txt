@@ -25,3 +25,4 @@ uvicorn
 nest-asyncio
 python-multipart
 requests
+git+https://github.com/microsoft/MoGe.git

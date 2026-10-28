@@ -6,7 +6,7 @@ Runs the full detection pipeline on a single image:
     image + labels
       -> Grounding DINO           (boxes, scores, text labels)
       -> SAM2                     (per-box masks)
-      -> Apple Depth Pro          (metric depth map + focal length)
+      -> MoGe-2                   (metric depth map + focal length)
       -> per-food depth statistics
 
 Returns an InferenceResult: a dataclass that separates JSON-safe
@@ -28,7 +28,7 @@ from PIL import Image
 
 from vision_service.inference.models import (
     DEVICE,
-    get_depth_pro,
+    get_moge,
     get_grounding_dino,
     get_sam2_predictor,
 )
@@ -162,7 +162,7 @@ def _visualize_depth(depth_map) -> None:
     plt.figure(figsize=(8, 8))
     plt.imshow(depth_map, cmap="inferno")
     plt.colorbar(label="Depth (meters)")
-    plt.title("Apple Depth Pro")
+    plt.title("MoGe-2 Depth")
     plt.axis("off")
     plt.show()
 
@@ -174,27 +174,18 @@ def detect_and_measure(
 ) -> InferenceResult:
     """
     Run the full inference pipeline on one image.
-
-    focal_px_override, if provided, is used as the focal length
-    passed to Depth Pro when the image has no EXIF focal. This
-    avoids Depth Pro's internal focal guess, which is unreliable
-    on PNG inputs.
-
-    Raises ValueError for malformed inputs. Other exceptions
-    (model, CUDA, I/O) propagate to the caller.
     """
     if not labels:
         raise ValueError("At least one label is required.")
 
     processor, grounding_dino = get_grounding_dino()
     sam2_predictor = get_sam2_predictor()
-    depth_pro, depth_model, depth_transform = get_depth_pro()
+    moge_model = get_moge()
 
     image = Image.open(image_path).convert("RGB")
     image_np = np.asarray(image).copy()
 
     # --- Grounding DINO: image + text -> boxes + labels + scores.
-
     inputs = processor(
         images=image,
         text=". ".join(labels) + ".",
@@ -224,7 +215,6 @@ def detect_and_measure(
         _visualize_boxes(image_np, boxes, detected_labels, scores)
 
     # --- SAM2: image + boxes -> masks.
-
     sam2_predictor.set_image(image_np)
 
     masks = []
@@ -238,35 +228,23 @@ def detect_and_measure(
     if SHOW_VISUALIZATIONS:
         _visualize_masks(image_np, masks, boxes, detected_labels, scores)
 
-    # --- Depth Pro: image -> metric depth map + focal length.
-
-    depth_image, _, f_px = depth_pro.load_rgb(image_path)
-
-    # When the image has no EXIF (PNG, screenshots, Blender renders),
-    # Depth Pro guesses a focal. Its guess is 1.5-13x wrong on the
-    # MetaFood3D renders, which propagates to the volume as a scale
-    # error. If the caller knows the true focal, use it instead.
-    if f_px is None and focal_px_override is not None:
-        f_px = torch.tensor(
-            float(focal_px_override),
-            device=DEVICE,
-            dtype=torch.float32,
-        )
-
-    depth_tensor = depth_transform(depth_image).to(DEVICE)
+    # --- MoGe-2: image -> metric depth map + focal length.
+    # Convert image to tensor (BGR -> RGB is already done, just normalize and reshape)
+    image_tensor = torch.tensor(image_np / 255.0, dtype=torch.float32, device=DEVICE)
+    image_tensor = image_tensor.permute(2, 0, 1).unsqueeze(0) # Shape: (1, 3, H, W)
 
     with torch.no_grad():
-        prediction = depth_model.infer(depth_tensor, f_px=f_px)
+        prediction = moge_model.infer(image_tensor)
 
-    depth_map = (
-        prediction["depth"].detach().cpu().numpy().astype(np.float32)
-    )
-
-    focal_length_px = prediction["focallength_px"]
-    if torch.is_tensor(focal_length_px):
-        focal_length_px = focal_length_px.detach().cpu().item()
+    depth_map = prediction["depth"].squeeze().cpu().numpy().astype(np.float32)
+    
+    # Extract focal length from predicted intrinsics
+    intrinsics = prediction.get("intrinsics")
+    if intrinsics is not None:
+        focal_length_px = float(intrinsics[0, 0, 0].item())
     else:
-        focal_length_px = float(focal_length_px)
+        # Use override if provided, otherwise fallback
+        focal_length_px = focal_px_override if focal_px_override else 1000.0
 
     if depth_map.shape != image_np.shape[:2]:
         depth_map = cv2.resize(
@@ -279,7 +257,6 @@ def detect_and_measure(
         _visualize_depth(depth_map)
 
     # --- Per-food aggregation: depth stats inside each mask.
-
     foods: list[FoodDetection] = []
 
     for label, score, mask, box in zip(detected_labels, scores, masks, boxes):
