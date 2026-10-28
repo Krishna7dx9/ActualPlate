@@ -115,6 +115,8 @@ async def detect(
     include_arrays: bool = Form(False),
     debug: bool = Form(False),
     focal_px: float | None = Form(None),
+    estimated_thickness_cm: float | None = Form(None), # <--- NEW
+    estimated_diameter_cm: float | None = Form(None),  # <--- NEW
     x_api_token: str | None = Header(default=None),
 ) -> JSONResponse:
 
@@ -161,24 +163,59 @@ async def detect(
                 "mask_b64": getattr(food, "mask_b64", None),
             }
 
-            try:
-                volume_result = estimate_volume_cm3(
-                    depth_map=result.depth_map,
-                    mask=mask,
-                    focal_length_px=result.focal_length_px,
-                    return_debug=debug,
-                )
-                if debug:
-                    dbg = volume_result.pop("_debug", None)
-                    if dbg is not None:
-                        food_record["_debug"] = dbg
-                food_record.update(volume_result)
-                food_record["volume_status"] = "valid"
+            # --- NEW 3D NORMALIZATION MATH ---
+            if estimated_thickness_cm is not None and estimated_diameter_cm is not None:
+                food_depth = result.depth_map[mask]
+                
+                if len(food_depth) > 0:
+                    min_d = float(np.min(food_depth))
+                    max_d = float(np.max(food_depth))
+                    
+                    if max_d > min_d:
+                        # 1. Normalize to 0-1 (Compresses the shape)
+                        normalized = (max_d - result.depth_map) / (max_d - min_d)
+                        normalized = np.clip(normalized, 0, 1)
+                    else:
+                        normalized = np.zeros_like(result.depth_map)
+                        
+                    # 2. Multiply by Gemma's real-world thickness
+                    real_height = normalized * float(estimated_thickness_cm)
+                    
+                    # 3. Calculate real-world pixel area
+                    bbox = getattr(food, "bbox", [0,0,0,0])
+                    bbox_w_px = max(1.0, bbox[2] - bbox[0])
+                    cm_per_px = float(estimated_diameter_cm) / bbox_w_px
+                    pixel_area_cm2 = cm_per_px ** 2
+                    
+                    # 4. Integrate Volume (Sum of Height * Area for each pixel)
+                    vol = float(np.sum(real_height[mask]) * pixel_area_cm2)
+                    
+                    food_record["volume_cm3"] = vol
+                    food_record["volume_status"] = "valid"
+                    food_record["scale_factor_applied"] = cm_per_px
+                else:
+                    food_record["volume_cm3"] = 0.0
+                    food_record["volume_status"] = "unreliable"
+            else:
+                # Fallback to old math if VLM didn't provide data
+                try:
+                    volume_result = estimate_volume_cm3(
+                        depth_map=result.depth_map,
+                        mask=mask,
+                        focal_length_px=result.focal_length_px,
+                        return_debug=debug,
+                    )
+                    if debug:
+                        dbg = volume_result.pop("_debug", None)
+                        if dbg is not None:
+                            food_record["_debug"] = dbg
+                    food_record.update(volume_result)
+                    food_record["volume_status"] = "valid"
 
-            except ValueError as exc:
-                food_record["volume_cm3"] = None
-                food_record["volume_status"] = "unreliable"
-                food_record["volume_error"] = str(exc)
+                except ValueError as exc:
+                    food_record["volume_cm3"] = None
+                    food_record["volume_status"] = "unreliable"
+                    food_record["volume_error"] = str(exc)
 
             if include_arrays:
                 m = np.asarray(mask, dtype=np.uint8)
@@ -187,9 +224,7 @@ async def detect(
 
             foods.append(food_record)
 
-        # Encode REAL depth map to Base64
-        import cv2
-        import numpy as np
+        # Encode REAL depth map to Base64 for the UI
         depth_m = result.depth_map
         depth_norm = cv2.normalize(depth_m, None, 0, 255, cv2.NORM_MINMAX)
         depth_uint8 = depth_norm.astype(np.uint8)
