@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from backend.app.services.pipeline import process_image, process_image_stream
 
 router = APIRouter()
@@ -22,7 +22,9 @@ async def options_stream():
 
 @router.post("/upload-image-stream")
 async def upload_image_stream(file: UploadFile = File(...)):
-    # Explicit CORS headers + X-Accel-Buffering to prevent Cloudflare from buffering the stream
+    if not file.content_type or not file.content_type.startswith("image/"):
+        return JSONResponse(status_code=400, content={"error": "Only image files allowed"})
+        
     return StreamingResponse(
         process_image_stream(file),
         media_type="text/event-stream",
@@ -36,4 +38,7 @@ async def upload_image_stream(file: UploadFile = File(...)):
 
 @router.post("/upload-image")
 async def upload_image(file: UploadFile = File(...)):
+    if not file.content_type or not file.content_type.startswith("image/"):
+        return JSONResponse(status_code=400, content={"error": "Only image files allowed"})
+        
     return await process_image(file)
