@@ -1,5 +1,5 @@
 import os
-
+import json
 import requests
 
 from vision_service.config import VISION_INFERENCE_ENDPOINT
@@ -16,8 +16,7 @@ class GroundingDINODetector(BaseDetector):
         self,
         image_path: str,
         labels: list[str],
-        estimated_thickness_cm: float | None = None,
-        estimated_diameter_cm: float | None = None,
+        scale_map: dict | None = None,
         debug: bool = False,
     ):
         
@@ -27,11 +26,9 @@ class GroundingDINODetector(BaseDetector):
             "debug": "true" if debug else "false"
         }
         
-        # Pass Gemma's real-world scale to the worker for the 3D math
-        if estimated_thickness_cm is not None:
-            data["estimated_thickness_cm"] = estimated_thickness_cm
-        if estimated_diameter_cm is not None:
-            data["estimated_diameter_cm"] = estimated_diameter_cm
+        # Pass Gemma's real-world scale map to the worker for the 3D math
+        if scale_map:
+            data["scale_map"] = json.dumps(scale_map)
 
         with open(image_path, "rb") as image:
 
