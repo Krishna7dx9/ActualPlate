@@ -54,6 +54,8 @@ from vision_service.inference.volume import estimate_volume_cm3
 
 
 VISION_API_TOKEN = os.environ.get("VISION_API_TOKEN")
+if not VISION_API_TOKEN:
+    raise ValueError("VISION_API_TOKEN environment variable must be set.")
 
 # Maximum side length for arrays returned when include_arrays=true.
 MAX_ARRAY_SIDE = 512
