@@ -216,14 +216,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# Temporary diagnostic scripts
+scripts/diagnostics/_*.py
+scripts/diagnostics/temp_*.py
+scripts/diagnostics/verify_local_pipeline.py
+
+# Benchmark data outputs (Keep the code, ignore the raw data)
+benchmarks/results/**/*.csv
 benchmarks/ablation/results/*.csv
-_filter_check.py
-_verify.py
-benchmarks/
-_one_diag.py
-_table.py
-_test_actual_code.py
-_test_real_gemma.py
-_ultimate_diag.py
-benchmark_100_remote.py
-test_2_local.py

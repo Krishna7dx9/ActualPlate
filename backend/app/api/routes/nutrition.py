@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query
-from nutrition.providers.fatsecret_client import search_food
-from nutrition.nutrition_formatter import format_nutrition_response
+from backend.app.nutrition.providers.fatsecret_client import search_food
+from backend.app.nutrition.nutrition_formatter import format_nutrition_response
 
 router = APIRouter()
 

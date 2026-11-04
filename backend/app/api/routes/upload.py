@@ -1,6 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, Response
 from fastapi.responses import StreamingResponse
-from backend.services.pipeline import process_image, process_image_stream
+from backend.app.services.pipeline import process_image, process_image_stream
 
 router = APIRouter()
 

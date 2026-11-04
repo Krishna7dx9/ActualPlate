@@ -1,4 +1,4 @@
-from nutrition.providers.fatsecret_client import get_access_token, search_food
+from backend.app.nutrition.providers.fatsecret_client import get_access_token, search_food
 
 def test_get_access_token():
     token = get_access_token()
