@@ -5,7 +5,7 @@ from backend.app.main import app
 client = TestClient(app)
 
 
-@patch("backend.services.pipeline.detect_food")
+@patch("backend.app.services.pipeline.detect_food")
 def test_single_food(mock_detect):
     mock_detect.return_value = "pizza"
     response = client.post(
@@ -15,7 +15,7 @@ def test_single_food(mock_detect):
     assert response.status_code == 200
 
 
-@patch("backend.services.pipeline.detect_food")
+@patch("backend.app.services.pipeline.detect_food")
 def test_multiple_food(mock_detect):
     mock_detect.return_value = "pizza,burger,coke"
     response = client.post(
@@ -25,7 +25,7 @@ def test_multiple_food(mock_detect):
     assert response.status_code == 200
 
 
-@patch("backend.services.pipeline.detect_food")
+@patch("backend.app.services.pipeline.detect_food")
 def test_empty_food(mock_detect):
     mock_detect.return_value = ""
     response = client.post(

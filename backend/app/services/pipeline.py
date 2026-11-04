@@ -6,9 +6,9 @@ import base64
 import numpy as np
 from fastapi import UploadFile
 
-from nutrition.providers.fatsecret_client import search_food
-from nutrition.nutrition_formatter import format_nutrition_response
-from nutrition.nutrition_aggregator import aggregate_nutrition
+from backend.app.nutrition.providers.fatsecret_client import search_food
+from backend.app.nutrition.nutrition_formatter import format_nutrition_response
+from backend.app.nutrition.nutrition_aggregator import aggregate_nutrition
 from vision_service.recognition.food_recognition import detect_food
 from vision_service.detection.grounding_dino_detector import GroundingDINODetector
 
