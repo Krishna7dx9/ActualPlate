@@ -1,14 +1,11 @@
 ﻿import fs from 'fs';
 import path from 'path';
 
-const apiUrl = process.env.VITE_API_URL;
+// Fallback to production API URL if not set in Netlify env
+const apiUrl = process.env.VITE_API_URL || "https://api.actualplate.tech";
 
-if (!apiUrl) {
-    console.error("ERROR: VITE_API_URL environment variable is missing.");
-    process.exit(1);
-}
-
-const templatePath = path.join(process.cwd(), 'web', 'index.html');
+// Since netlify.toml has base="web", cwd is the web folder
+const templatePath = path.join(process.cwd(), 'index.html');
 const outputPath = path.join(process.cwd(), 'dist', 'index.html');
 
 console.log(`Injecting API_URL: ${apiUrl}`);
