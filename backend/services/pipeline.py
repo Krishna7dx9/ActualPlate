@@ -25,19 +25,22 @@ async def process_image(file: UploadFile):
         detected_foods = detect_food(image)
         if not detected_foods: return {"error": "Food not detected"}
 
-        # Pass Gemma's real-world scale to the Vision Worker for the 3D math
-        thickness = detected_foods[0].get("estimated_thickness_cm") if detected_foods else None
-        diameter = detected_foods[0].get("estimated_diameter_cm") if detected_foods else None
+        # Build a scale map for ALL foods
+        scale_map = {
+            food["search_query"].strip().lower(): {
+                "thickness": food.get("estimated_thickness_cm"),
+                "diameter": food.get("estimated_diameter_cm")
+            }
+            for food in detected_foods
+        }
         
         detections = detector.detect(
             image_path=image_path, 
             labels=[item["search_query"] for item in detected_foods],
-            estimated_thickness_cm=thickness,
-            estimated_diameter_cm=diameter
+            scale_map=scale_map
         )
         foods_data = detections.get("foods", [])
 
-        # The Vision Worker has already calculated the 3D Volume. We just aggregate it.
         merged = {}
         for item in foods_data:
             label = item.get("label", "").strip().lower()
@@ -56,7 +59,7 @@ async def process_image(file: UploadFile):
                     data = search_food(q)
                     if "error" not in data:
                         nutrition_results.append(format_nutrition_response(data, mass))
-                except Exception: pass
+                except Exception: pass # Will fix in another branch
 
         return {
             "foods": nutrition_results, 
@@ -84,21 +87,24 @@ async def process_image_stream(file):
 
         yield f"data: {json.dumps({'step': 'dino', 'status': 'running', 'message': 'Running DINO, SAM2, and 3D Math...'})}\n\n"
         
-        # Pass Gemma's scale to the worker
-        thickness = detected_foods[0].get("estimated_thickness_cm") if detected_foods else None
-        diameter = detected_foods[0].get("estimated_diameter_cm") if detected_foods else None
+        # Build a scale map for ALL foods
+        scale_map = {
+            food["search_query"].strip().lower(): {
+                "thickness": food.get("estimated_thickness_cm"),
+                "diameter": food.get("estimated_diameter_cm")
+            }
+            for food in detected_foods
+        }
         
         detections = detector.detect(
             image_path=image_path, 
             labels=[item["search_query"] for item in detected_foods],
-            estimated_thickness_cm=thickness,
-            estimated_diameter_cm=diameter
+            scale_map=scale_map
         )
         foods_data = detections.get("foods", [])
         
         img_array = cv2.imread(image_path)
         
-        # DINO Boxes (Clean, No Text)
         dino_img = img_array.copy()
         colors = [(0, 255, 0), (0, 165, 255), (255, 0, 0), (255, 255, 0)]
         
@@ -113,7 +119,6 @@ async def process_image_stream(file):
         dino_b64 = base64.b64encode(buffer).decode('utf-8')
         yield f"data: {json.dumps({'step': 'dino', 'status': 'done', 'message': 'DINO localized', 'image': dino_b64})}\n\n"
 
-        # SAM2 REAL Masks (Clean)
         sam2_img = img_array.copy()
         for idx, item in enumerate(foods_data):
             mask_b64 = item.get("mask_b64")
@@ -124,8 +129,6 @@ async def process_image_stream(file):
                     mask_np = cv2.resize(mask_np, (img_array.shape[1], img_array.shape[0]), interpolation=cv2.INTER_NEAREST)
                 
                 c = colors[idx % len(colors)]
-                
-                # Pure translucent fill, no text
                 colored_mask = np.zeros_like(sam2_img)
                 colored_mask[mask_np > 127] = c
                 sam2_img = cv2.addWeighted(sam2_img, 1.0, colored_mask, 0.35, 0)
@@ -134,13 +137,11 @@ async def process_image_stream(file):
         sam2_b64 = base64.b64encode(buffer).decode('utf-8')
         yield f"data: {json.dumps({'step': 'sam2', 'status': 'done', 'message': 'SAM2 segmented', 'image': sam2_b64})}\n\n"
 
-        # Depth (LEAVE AS IS FOR THIS BRANCH - we will fix UI later)
         depth_img = cv2.applyColorMap(cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY), cv2.COLORMAP_JET)
         _, buffer = cv2.imencode('.jpg', depth_img)
         depth_b64 = base64.b64encode(buffer).decode('utf-8')
         yield f"data: {json.dumps({'step': 'depth', 'status': 'done', 'message': 'Depth map generated', 'image': depth_b64})}\n\n"
 
-        # Volume (Already calculated by the Vision Worker, we just aggregate)
         yield f"data: {json.dumps({'step': 'volume', 'status': 'done', 'message': 'Volume calculated'})}\n\n"
         
         merged = {}
@@ -150,7 +151,6 @@ async def process_image_stream(file):
             if label and vol: 
                 merged[label] = merged.get(label, 0) + vol
 
-        # Nutrition
         yield f"data: {json.dumps({'step': 'nutrition', 'status': 'running', 'message': 'Fetching FatSecret...'})}\n\n"
         nutrition_results = []
         for item in detected_foods:
@@ -163,7 +163,7 @@ async def process_image_stream(file):
                     data = search_food(q)
                     if "error" not in data:
                         nutrition_results.append(format_nutrition_response(data, mass))
-                except Exception: pass
+                except Exception: pass # Will fix in another branch
 
         final_payload = {"foods": nutrition_results, "geometry": foods_data, "vlm_output": detected_foods, "total_detected": len(foods_data), "total_nutrition": aggregate_nutrition(nutrition_results)}
         yield f"data: {json.dumps({'step': 'nutrition', 'status': 'done', 'message': 'Complete', 'final': final_payload})}\n\n"

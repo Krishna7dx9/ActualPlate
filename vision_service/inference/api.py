@@ -42,6 +42,7 @@ import os
 import shutil
 import tempfile
 import uuid
+import json
 
 import cv2
 import numpy as np
@@ -117,8 +118,7 @@ async def detect(
     include_arrays: bool = Form(False),
     debug: bool = Form(False),
     focal_px: float | None = Form(None),
-    estimated_thickness_cm: float | None = Form(None), # <--- NEW
-    estimated_diameter_cm: float | None = Form(None),  # <--- NEW
+    scale_map: str | None = Form(None), # <--- Replaced individual floats with map
     x_api_token: str | None = Header(default=None),
 ) -> JSONResponse:
 
@@ -135,6 +135,14 @@ async def detect(
     food_labels = [l.strip() for l in labels.split(",") if l.strip()]
     if not food_labels:
         raise HTTPException(status_code=400, detail="No labels provided.")
+
+    # Parse the scale map JSON string
+    parsed_scale_map = {}
+    if scale_map:
+        try:
+            parsed_scale_map = json.loads(scale_map)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid scale_map JSON format.")
 
     image_path: str | None = None
 
@@ -155,6 +163,12 @@ async def detect(
         foods = []
 
         for food, mask in zip(result.foods, result.masks):
+            
+            # Look up the correct scale for THIS specific food
+            food_label_lower = food.label.strip().lower()
+            food_scale = parsed_scale_map.get(food_label_lower, {})
+            estimated_thickness_cm = food_scale.get("thickness")
+            estimated_diameter_cm = food_scale.get("diameter")
 
             food_record = {
                 "label": food.label,
@@ -199,7 +213,7 @@ async def detect(
                     food_record["volume_cm3"] = 0.0
                     food_record["volume_status"] = "unreliable"
             else:
-                # Fallback to old math if VLM didn't provide data
+                # Fallback to old math if VLM didn't provide data for this food
                 try:
                     volume_result = estimate_volume_cm3(
                         depth_map=result.depth_map,
