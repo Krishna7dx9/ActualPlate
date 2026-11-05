@@ -24,16 +24,15 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pytest pytest-asyncio
-        # Install your actual requirements (excluding heavy GPU libs for CI)
-        # If requirements.txt has heavy GPU stuff, you might need a requirements-ci.txt
+        # Install required testing dependencies (no heavy GPU libs)
         pip install fastapi httpx python-multipart scipy numpy requests python-dotenv openai
 
-    - name: Run Fast Tests (Unit, API, Integration, Contracts, Security)
+    - name: Run Fast Tests
       env:
         # Inject fake tokens so the app doesn't crash on import
         VISION_API_TOKEN: "test-token"
         FATSECRET_CLIENT_ID: "test-id"
         FATSECRET_CLIENT_SECRET: "test-secret"
       run: |
-        # We explicitly exclude tests/e2e because it requires a live Kaggle GPU
-        pytest tests/unit tests/api tests/integration tests/contracts tests/security tests/regression -v
+        # Run everything in tests/, but explicitly ignore the live E2E tests
+        pytest tests/ --ignore=tests/e2e -v
