@@ -141,7 +141,6 @@ async def process_image_stream(file):
         real_depth_b64 = detections.get("depth_b64", "")
         yield f"data: {json.dumps({'step': 'depth', 'status': 'done', 'message': 'Depth map generated', 'image': real_depth_b64})}\n\n"        
         
-        # FIXED: Adding the missing volume step to the stream
         yield f"data: {json.dumps({'step': 'volume', 'status': 'done', 'message': 'Volume calculated'})}\n\n"
 
         merged = {}
@@ -165,7 +164,20 @@ async def process_image_stream(file):
                         nutrition_results.append(format_nutrition_response(data, mass))
                 except Exception: pass # Will fix in another branch
 
-        final_payload = {"foods": nutrition_results, "geometry": foods_data, "vlm_output": detected_foods, "total_detected": len(foods_data), "total_nutrition": aggregate_nutrition(nutrition_results)}
+        # FIX: Remove heavy base64 masks from final payload to prevent browser OOM crash
+        clean_geometry = []
+        for item in foods_data:
+            clean_item = item.copy()
+            clean_item.pop("mask_b64", None)
+            clean_geometry.append(clean_item)
+
+        final_payload = {
+            "foods": nutrition_results, 
+            "geometry": clean_geometry, 
+            "vlm_output": detected_foods, 
+            "total_detected": len(foods_data), 
+            "total_nutrition": aggregate_nutrition(nutrition_results)
+        }
         yield f"data: {json.dumps({'step': 'nutrition', 'status': 'done', 'message': 'Complete', 'final': final_payload})}\n\n"
     finally:
         if image_path and os.path.exists(image_path): os.remove(image_path)

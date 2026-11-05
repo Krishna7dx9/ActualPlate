@@ -242,6 +242,14 @@ async def detect(
 
         # Encode REAL depth map to Base64 for the UI
         depth_m = result.depth_map
+        
+        # FIX: Sanitize NaN/Inf and clip extreme outliers for the UI
+        depth_m = np.nan_to_num(depth_m, nan=0.0, posinf=0.0, neginf=0.0)
+        valid_depths = depth_m[depth_m > 0]
+        if len(valid_depths) > 0:
+            p1, p99 = np.percentile(valid_depths, [1, 99])
+            depth_m = np.clip(depth_m, p1, p99)
+            
         depth_norm = cv2.normalize(depth_m, None, 0, 255, cv2.NORM_MINMAX)
         depth_uint8 = depth_norm.astype(np.uint8)
         _, depth_buffer = cv2.imencode('.png', depth_uint8)
