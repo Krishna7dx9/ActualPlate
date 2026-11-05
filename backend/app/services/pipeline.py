@@ -141,6 +141,9 @@ async def process_image_stream(file):
         real_depth_b64 = detections.get("depth_b64", "")
         yield f"data: {json.dumps({'step': 'depth', 'status': 'done', 'message': 'Depth map generated', 'image': real_depth_b64})}\n\n"        
         
+        # FIXED: Adding the missing volume step to the stream
+        yield f"data: {json.dumps({'step': 'volume', 'status': 'done', 'message': 'Volume calculated'})}\n\n"
+
         merged = {}
         for item in foods_data:
             label = item.get("label", "").strip().lower()
