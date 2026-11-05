@@ -242,9 +242,39 @@ async def detect(
 
         # Encode REAL depth map to Base64 for the UI
         depth_m = result.depth_map
+        
+        # 1. Sanitize NaN/Inf
+        depth_m = np.nan_to_num(depth_m, nan=0.0, posinf=0.0, neginf=0.0)
+
+        # 2. Create a combined mask of ALL foods to focus the color scale
+        combined_mask = np.zeros_like(depth_m, dtype=bool)
+        for mask in result.masks:
+            if mask.shape == depth_m.shape:
+                combined_mask |= mask
+
+        # 3. Clip outliers based ONLY on the food's depth range
+        food_depths = depth_m[combined_mask]
+        if len(food_depths) > 100:
+            p1, p99 = np.percentile(food_depths, [1, 99])
+        else:
+            valid_depths = depth_m[depth_m > 0]
+            p1, p99 = np.percentile(valid_depths, [1, 99]) if len(valid_depths) > 0 else (0, 1)
+            
+        depth_m = np.clip(depth_m, p1, p99)
+            
         depth_norm = cv2.normalize(depth_m, None, 0, 255, cv2.NORM_MINMAX)
         depth_uint8 = depth_norm.astype(np.uint8)
-        _, depth_buffer = cv2.imencode('.png', depth_uint8)
+        
+        # 4. Bilateral Filter: smooths flat areas (background) but preserves edges (food)
+        depth_uint8 = cv2.bilateralFilter(depth_uint8, 9, 75, 75)
+        
+        # 5. Apply colormap
+        depth_color = cv2.applyColorMap(depth_uint8, cv2.COLORMAP_INFERNO)
+        
+        # 6. Dim the background (outside the mask) so the food pops and the halo noise is hidden
+        depth_color[~combined_mask] = (depth_color[~combined_mask] * 0.3).astype(np.uint8)
+        
+        _, depth_buffer = cv2.imencode('.png', depth_color)
         depth_b64 = base64.b64encode(depth_buffer).decode('utf-8')
 
         response = {
