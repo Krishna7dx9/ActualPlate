@@ -243,7 +243,8 @@ async def detect(
         # Encode REAL depth map to Base64 for the UI
         depth_m = result.depth_map
         
-        # FIX: Sanitize NaN/Inf and clip extreme outliers for the UI
+        # 1. Sanitize NaN/Inf and clip extreme outliers
+        # This prevents background hallucinations from crushing the food's depth range.
         depth_m = np.nan_to_num(depth_m, nan=0.0, posinf=0.0, neginf=0.0)
         valid_depths = depth_m[depth_m > 0]
         if len(valid_depths) > 0:
@@ -252,7 +253,14 @@ async def detect(
             
         depth_norm = cv2.normalize(depth_m, None, 0, 255, cv2.NORM_MINMAX)
         depth_uint8 = depth_norm.astype(np.uint8)
-        _, depth_buffer = cv2.imencode('.png', depth_uint8)
+        
+        # 2. Apply median blur to smooth AI noise (salt & pepper artifacts)
+        depth_uint8 = cv2.medianBlur(depth_uint8, 5)
+        
+        # 3. Apply a beautiful colormap (Inferno) so users see a 3D heatmap instead of a black blob
+        depth_color = cv2.applyColorMap(depth_uint8, cv2.COLORMAP_INFERNO)
+        
+        _, depth_buffer = cv2.imencode('.png', depth_color)
         depth_b64 = base64.b64encode(depth_buffer).decode('utf-8')
 
         response = {
