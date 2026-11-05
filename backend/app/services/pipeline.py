@@ -137,12 +137,9 @@ async def process_image_stream(file):
         sam2_b64 = base64.b64encode(buffer).decode('utf-8')
         yield f"data: {json.dumps({'step': 'sam2', 'status': 'done', 'message': 'SAM2 segmented', 'image': sam2_b64})}\n\n"
 
-        depth_img = cv2.applyColorMap(cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY), cv2.COLORMAP_JET)
-        _, buffer = cv2.imencode('.jpg', depth_img)
-        depth_b64 = base64.b64encode(buffer).decode('utf-8')
-        yield f"data: {json.dumps({'step': 'depth', 'status': 'done', 'message': 'Depth map generated', 'image': depth_b64})}\n\n"
-
-        yield f"data: {json.dumps({'step': 'volume', 'status': 'done', 'message': 'Volume calculated'})}\n\n"
+        # Use the REAL MoGe-2 depth map from the Vision Worker
+        real_depth_b64 = detections.get("depth_b64", "")
+        yield f"data: {json.dumps({'step': 'depth', 'status': 'done', 'message': 'Depth map generated', 'image': real_depth_b64})}\n\n"        
         
         merged = {}
         for item in foods_data:

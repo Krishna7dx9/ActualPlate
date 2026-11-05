@@ -33,7 +33,7 @@ SAM2_MODEL_ID = os.environ.get(
     "facebook/sam2-hiera-large",
 )
 
-# MoGe-2 replaces Apple Depth Pro. Using the commercial-friendly MIT licensed model.
+# MoGe-2 (MIT License) for metric monocular depth.
 MOGE_MODEL_ID = os.environ.get(
     "MOGE_MODEL_ID",
     "Ruicheng/moge-2-vitl-normal",
