@@ -24,7 +24,9 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pytest pytest-asyncio
-        # Added opencv-python-headless for cv2 support
+        # Install CPU-only PyTorch to avoid huge downloads
+        pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+        # Install other required dependencies
         pip install fastapi httpx python-multipart scipy numpy requests python-dotenv openai opencv-python-headless
 
     - name: Run Fast Tests
@@ -33,7 +35,7 @@ jobs:
         VISION_API_TOKEN: "test-token"
         FATSECRET_CLIENT_ID: "test-id"
         FATSECRET_CLIENT_SECRET: "test-secret"
-        OPENROUTER_API_KEY: "fake-openrouter-key" # <--- ADDED THIS
+        OPENROUTER_API_KEY: "fake-openrouter-key"
       run: |
         # Run everything in tests/, but explicitly ignore the live E2E tests
         pytest tests/ --ignore=tests/e2e -v
