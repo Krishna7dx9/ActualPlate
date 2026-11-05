@@ -1,0 +1,39 @@
+name: Python CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-asyncio
+        # Install your actual requirements (excluding heavy GPU libs for CI)
+        # If requirements.txt has heavy GPU stuff, you might need a requirements-ci.txt
+        pip install fastapi httpx python-multipart scipy numpy requests python-dotenv openai
+
+    - name: Run Fast Tests (Unit, API, Integration, Contracts, Security)
+      env:
+        # Inject fake tokens so the app doesn't crash on import
+        VISION_API_TOKEN: "test-token"
+        FATSECRET_CLIENT_ID: "test-id"
+        FATSECRET_CLIENT_SECRET: "test-secret"
+      run: |
+        # We explicitly exclude tests/e2e because it requires a live Kaggle GPU
+        pytest tests/unit tests/api tests/integration tests/contracts tests/security tests/regression -v
