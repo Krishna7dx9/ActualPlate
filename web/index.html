@@ -383,7 +383,13 @@ function updateStep(data) {
       foods = data.final.foods;
       buildChips();
       setState('done');
-      showFood(0);
+      
+      if (foods.length > 1) {
+        showTotal();
+      } else {
+        showFood(0);
+      }
+      
       if (innerWidth < 980) setTimeout(() => $('plate').scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
     }
   }
@@ -393,13 +399,76 @@ function buildChips() {
   const box = $('chips');
   box.innerHTML = '';
   if (foods.length < 2) return;
+
+  // Add Total Plate chip
+  const totalBtn = document.createElement('button');
+  totalBtn.className = 'chip'; totalBtn.textContent = 'Total Plate';
+  totalBtn.setAttribute('aria-pressed', 'true'); // Default to true
+  totalBtn.onclick = () => { 
+      [...box.children].forEach(c => c.setAttribute('aria-pressed', false)); 
+      totalBtn.setAttribute('aria-pressed', 'true'); 
+      showTotal(); 
+  };
+  box.appendChild(totalBtn);
+
+  // Add individual food chips
   foods.forEach((f, i) => {
     const b = document.createElement('button');
     b.className = 'chip'; b.textContent = f.food_name;
-    b.setAttribute('aria-pressed', i === 0);
-    b.onclick = () => { [...box.children].forEach((c, j) => c.setAttribute('aria-pressed', j === i)); showFood(i); };
+    b.setAttribute('aria-pressed', 'false');
+    b.onclick = () => { 
+        [...box.children].forEach(c => c.setAttribute('aria-pressed', false)); 
+        b.setAttribute('aria-pressed', 'true'); 
+        showFood(i); 
+    };
     box.appendChild(b);
   });
+}
+
+function showTotal() {
+  let totalCal = 0, totalP = 0, totalC = 0, totalF = 0, totalMass = 0;
+  
+  foods.forEach(f => {
+    const n = f.nutrition || {};
+    totalCal += num(n.calories);
+    totalP += num(n.protein);
+    totalC += num(n.carbohydrate);
+    totalF += num(n.fat);
+    totalMass += num(f.mass_g);
+  });
+
+  $('foodName').textContent = "Total Plate";
+  $('foodMass').textContent = totalMass.toFixed(0) + ' g';
+  $('valProtein').innerHTML = totalP.toFixed(1) + '<em>g</em>';
+  $('valCarbs').innerHTML = totalC.toFixed(1) + '<em>g</em>';
+  $('valFat').innerHTML = totalF.toFixed(1) + '<em>g</em>';
+
+  // animate calories
+  cancelAnimationFrame(raf);
+  const t0 = performance.now(), dur = 900;
+  const tick = t => {
+    const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+    $('valCalories').textContent = Math.round(totalCal * e);
+    if (k < 1) raf = requestAnimationFrame(tick);
+  };
+  raf = requestAnimationFrame(tick);
+
+  // macro ring
+  const kp = totalP * 4, kc = totalC * 4, kf = totalF * 9, totalCalMacros = (kp + kc + kf) || 1;
+  let cum = 0;
+  [['arcP', kp], ['arcC', kc], ['arcF', kf]].forEach(([id, k]) => {
+    const share = k / totalCalMacros * 100, len = Math.max(0, share - (share > 2 ? 1.6 : 0));
+    const el = $(id);
+    el.style.strokeDashoffset = -cum;
+    requestAnimationFrame(() => el.style.strokeDasharray = len.toFixed(2) + ' ' + (100 - len).toFixed(2));
+    cum += share;
+  });
+
+  // bars scaled to the largest macro by weight
+  const max = Math.max(totalP, totalC, totalF) || 1;
+  $('barP').style.width = (totalP / max * 100) + '%';
+  $('barC').style.width = (totalC / max * 100) + '%';
+  $('barF').style.width = (totalF / max * 100) + '%';
 }
 
 function showFood(i) {
