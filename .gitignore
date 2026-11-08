@@ -224,3 +224,4 @@ scripts/diagnostics/verify_local_pipeline.py
 # Benchmark data outputs (Keep the code, ignore the raw data)
 benchmarks/results/**/*.csv
 benchmarks/ablation/results/*.csv
+data/

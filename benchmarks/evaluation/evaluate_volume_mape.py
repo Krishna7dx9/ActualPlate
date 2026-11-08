@@ -1,5 +1,6 @@
 import os
 import csv
+import json
 import requests
 from pathlib import Path
 from dotenv import load_dotenv
@@ -7,36 +8,38 @@ from dotenv import load_dotenv
 load_dotenv()
 API_URL = os.environ["VISION_INFERENCE_ENDPOINT"]
 
-# Paths
 DATASET_DIR = Path.home() / "Downloads" / "simple_food_45" / "ordered_dataset"
 LABELS_FILE = DATASET_DIR / "labels.csv"
+RESULTS_FILE = Path("benchmarks/results/full_architecture_diagnostic.csv")
 
-# Use the existing benchmarks/results folder
-RESULTS_FILE = Path("benchmarks/results/baseline_volume_results.csv")
-
-def evaluate_full_dataset():
+def run_full_diagnostic():
     print(f"Loading ground truth from: {LABELS_FILE}")
-    
-    # Ensure results directory exists
-    RESULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
     
     # Load existing results to allow resuming if it crashes
     processed_images = set()
     if RESULTS_FILE.exists():
-        with open(RESULTS_FILE, "r") as f:
+        with open(RESULTS_FILE, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 processed_images.add(row["image"])
         print(f"Resuming. {len(processed_images)} images already processed.")
     else:
-        with open(RESULTS_FILE, "w", newline="") as f:
+        RESULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(RESULTS_FILE, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(["image", "label", "true_volume", "pred_volume", "abs_error_pct"])
+            # THE ULTIMATE HEADER
+            writer.writerow([
+                "image", "true_label", "true_volume", 
+                "pred_volume", "abs_error_pct", "volume_status",
+                "gemma_label", "gemma_diameter_cm", "gemma_thickness_cm", 
+                "bbox_width_px", "scale_factor_applied"
+            ])
 
     errors = []
-    total_processed = 0
+    total_evaluated = 0
+    total_skipped = 0
     
-    with open(LABELS_FILE, mode='r') as f:
+    with open(LABELS_FILE, mode='r', encoding="utf-8") as f:
         reader = csv.DictReader(f)
         
         for idx, row in enumerate(reader):
@@ -45,14 +48,14 @@ def evaluate_full_dataset():
             if image_name in processed_images:
                 continue
                 
+            true_label = row["label"]
             true_volume = float(row["volume"])
-            label = row["label"]
             image_path = DATASET_DIR / image_name
             
             if not image_path.exists():
                 continue
             
-            print(f"[{idx+1}] Testing {image_name} ({label})...", end="", flush=True)
+            print(f"[{idx+1}] {image_name} ({true_label})...", end="", flush=True)
             
             try:
                 with open(image_path, "rb") as img:
@@ -68,39 +71,63 @@ def evaluate_full_dataset():
                     
                 data = response.json()
                 geometry = data.get("geometry", [])
+                vlm_output = data.get("vlm_output", [])
                 
                 if not geometry:
                     print(" | FAIL (No geometry)")
+                    total_skipped += 1
                     continue
                 
-                pred_volume = geometry[0].get("volume_cm3")
+                geo = geometry[0]
+                vlm = vlm_output[0] if vlm_output else {}
+                
+                pred_volume = geo.get("volume_cm3")
+                volume_status = geo.get("volume_status", "unknown")
+                gemma_label = vlm.get("search_query", "N/A")
+                gemma_diam = vlm.get("estimated_diameter_cm", "N/A")
+                gemma_thick = vlm.get("estimated_thickness_cm", "N/A")
+                scale_factor = geo.get("scale_factor_applied", "N/A")
+                
+                # Bbox width
+                bbox = geo.get("bbox", [0,0,0,0])
+                bbox_w = round(bbox[2] - bbox[0], 1) if bbox else 0
                 
                 if pred_volume is None:
-                    print(f" | FAIL (Unreliable)")
-                    continue
-                    
-                error = abs(pred_volume - true_volume) / true_volume
-                errors.append(error)
-                total_processed += 1
+                    print(f" | SKIP (Unreliable) | Gemma: {gemma_thick}cm thick")
+                    error_str = "N/A"
+                    total_skipped += 1
+                else:
+                    error = abs(pred_volume - true_volume) / true_volume
+                    errors.append(error)
+                    total_evaluated += 1
+                    error_str = f"{error*100:.1f}%"
+                    print(f" | Pred: {pred_volume:.0f}cm³ | Err: {error_str} | Gemma: {gemma_thick}cm")
                 
                 # Append to CSV immediately
-                with open(RESULTS_FILE, "a", newline="") as f:
+                with open(RESULTS_FILE, "a", newline="", encoding="utf-8") as f:
                     writer = csv.writer(f)
-                    writer.writerow([image_name, label, true_volume, pred_volume, f"{error*100:.2f}"])
-                
-                print(f" | Pred: {pred_volume:.1f} cm³ | Err: {error*100:.1f}%")
+                    writer.writerow([
+                        image_name, true_label, true_volume, 
+                        pred_volume if pred_volume else "None", 
+                        error_str, volume_status,
+                        gemma_label, gemma_diam, gemma_thick, 
+                        bbox_w, scale_factor
+                    ])
                 
             except Exception as e:
                 print(f" | ERROR: {str(e)[:50]}")
+                total_skipped += 1
 
+    print("\n" + "="*60)
     if errors:
         mape = (sum(errors) / len(errors)) * 100
-        print("\n" + "="*50)
-        print(f"FINAL BASELINE MAPE (N={len(errors)}): {mape:.2f}%")
-        print(f"Results saved to: {RESULTS_FILE}")
-        print("="*50)
+        print(f"FINAL MAPE (N={total_evaluated} evaluated): {mape:.2f}%")
     else:
         print("No valid predictions collected.")
+    
+    print(f"Coverage: {total_evaluated} successful out of {total_evaluated + total_skipped} attempts")
+    print(f"Full diagnostic CSV saved to: {RESULTS_FILE}")
+    print("="*60)
 
 if __name__ == "__main__":
-    evaluate_full_dataset()
+    run_full_diagnostic()
