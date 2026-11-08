@@ -166,7 +166,29 @@ async def detect(
             
             # Look up the correct scale for THIS specific food
             food_label_lower = food.label.strip().lower()
-            food_scale = parsed_scale_map.get(food_label_lower, {})
+            food_scale = {}
+            
+            # 1. Try exact match
+            if food_label_lower in parsed_scale_map:
+                food_scale = parsed_scale_map[food_label_lower]
+            else:
+                # 2. Controlled Alias Match (Handles known DINO truncations safely)
+                aliases = {
+                    "corn": "corn on the cob",
+                    "nuggets": "chicken nugget",
+                    "fries": "french fries"
+                }
+                alias_target = aliases.get(food_label_lower, food_label_lower)
+                
+                if alias_target in parsed_scale_map:
+                    food_scale = parsed_scale_map[alias_target]
+                else:
+                    # 3. Strict unambiguous substring match
+                    # ONLY use it if there is exactly ONE match to prevent wrong scale assignment
+                    possible_matches = [k for k in parsed_scale_map.keys() if food_label_lower in k or k in food_label_lower]
+                    if len(possible_matches) == 1:
+                        food_scale = parsed_scale_map[possible_matches[0]]
+                        
             estimated_thickness_cm = food_scale.get("thickness")
             estimated_diameter_cm = food_scale.get("diameter")
 
@@ -213,25 +235,10 @@ async def detect(
                     food_record["volume_cm3"] = 0.0
                     food_record["volume_status"] = "unreliable"
             else:
-                # Fallback to old math if VLM didn't provide data for this food
-                try:
-                    volume_result = estimate_volume_cm3(
-                        depth_map=result.depth_map,
-                        mask=mask,
-                        focal_length_px=result.focal_length_px,
-                        return_debug=debug,
-                    )
-                    if debug:
-                        dbg = volume_result.pop("_debug", None)
-                        if dbg is not None:
-                            food_record["_debug"] = dbg
-                    food_record.update(volume_result)
-                    food_record["volume_status"] = "valid"
-
-                except ValueError as exc:
-                    food_record["volume_cm3"] = None
-                    food_record["volume_status"] = "unreliable"
-                    food_record["volume_error"] = str(exc)
+                # FAIL SAFELY: Do not use the unvalidated MoGe-2 absolute scale fallback
+                food_record["volume_cm3"] = None
+                food_record["volume_status"] = "unreliable"
+                food_record["volume_error"] = "No scale available or label mismatch"
 
             if include_arrays:
                 m = np.asarray(mask, dtype=np.uint8)
