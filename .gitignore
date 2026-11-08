@@ -225,3 +225,4 @@ scripts/diagnostics/verify_local_pipeline.py
 benchmarks/results/**/*.csv
 benchmarks/ablation/results/*.csv
 data/
+benchmarks/results/
