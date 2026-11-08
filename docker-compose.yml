@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  actualplate:
+    build: .
+    container_name: actualplate_api
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    env_file:
+      - .env
+    volumes:
+      # Mount the .env so you can change it without rebuilding the image
+      - ./.env:/app/.env
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
