@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   actualplate:
     build: .
@@ -10,7 +8,6 @@ services:
     env_file:
       - .env
     volumes:
-      # Mount the .env so you can change it without rebuilding the image
       - ./.env:/app/.env
     deploy:
       resources:

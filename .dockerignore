@@ -1,0 +1,13 @@
+# Ignore local python environments
+.venv/
+__pycache__/
+*.pyc
+
+# Ignore git and data folders
+.git/
+.gitignore
+data/
+benchmarks/results/
+
+# Ignore environment variables for security
+.env

@@ -1,5 +1,5 @@
 # Use official PyTorch image with CUDA 12.1 for GPU acceleration
-FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
+FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -16,14 +16,14 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Copy requirements first (this caches the pip install layer to save build time)
+# Copy requirements from the root and vision_service
+COPY requirements.txt /app/requirements.txt
 COPY vision_service/inference/requirements.txt /app/vision_service/inference/requirements.txt
-COPY backend/requirements.txt /app/backend/requirements.txt
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r vision_service/inference/requirements.txt && \
-    if [ -f backend/requirements.txt ]; then pip install --no-cache-dir -r backend/requirements.txt; fi
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r vision_service/inference/requirements.txt
 
 # Copy the rest of the application
 COPY . /app
