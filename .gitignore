@@ -226,3 +226,4 @@ benchmarks/results/**/*.csv
 benchmarks/ablation/results/*.csv
 data/
 benchmarks/results/
+benchmarks/ablation/results/
