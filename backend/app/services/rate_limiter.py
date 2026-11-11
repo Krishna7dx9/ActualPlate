@@ -57,7 +57,10 @@ class RateLimiter:
 
     async def _check_redis(self, identity_hash: str) -> tuple[bool, int, int]:
         if self._redis is None:
-            self._redis = Redis.from_url(self.redis_url, decode_responses=True)
+            try:
+                self._redis = Redis.from_url(self.redis_url, decode_responses=True)
+            except (RedisError, ValueError) as exc:
+                raise RateLimiterUnavailable("Shared rate-limit storage is unavailable.") from exc
         now_ms = int(time.time() * 1000)
         redis_key = f"actualplate:rate-limit:v1:{identity_hash}"
         member = f"{now_ms}:{uuid.uuid4().hex}"
@@ -71,7 +74,7 @@ class RateLimiter:
                 self.limit,
                 member,
             )
-        except RedisError as exc:
+        except (RedisError, ValueError) as exc:
             raise RateLimiterUnavailable("Shared rate-limit storage is unavailable.") from exc
         allowed = bool(int(result[0]))
         count = int(result[1])
@@ -104,6 +107,20 @@ class RateLimiter:
 
             events.append(now)
             return True, max(0, self.limit - len(events)), 0
+
+    async def health(self) -> dict[str, str]:
+        if not self.redis_url:
+            return {"status": "local", "mode": "in_memory"}
+        if self._redis is None:
+            try:
+                self._redis = Redis.from_url(self.redis_url, decode_responses=True)
+            except (RedisError, ValueError) as exc:
+                raise RateLimiterUnavailable("Shared rate-limit storage is unavailable.") from exc
+        try:
+            await self._redis.ping()
+        except (RedisError, ValueError) as exc:
+            raise RateLimiterUnavailable("Shared rate-limit storage is unavailable.") from exc
+        return {"status": "ok", "mode": "redis"}
 
     async def close(self) -> None:
         if self._redis is not None:

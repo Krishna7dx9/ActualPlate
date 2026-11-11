@@ -131,7 +131,7 @@ def get_current_principal(
         user_id=user.id,
         organization_id=organization.id,
         role=membership.role,
-        scopes=frozenset({"scans:write", "usage:read", "keys:manage"}),
+        scopes=frozenset({"scans:write", "usage:read", "keys:manage", "system:warmup"}),
         auth_method="jwt",
     )
 
