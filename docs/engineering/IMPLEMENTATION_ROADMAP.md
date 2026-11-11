@@ -58,7 +58,7 @@ This roadmap is the execution record for the engineering improvement program. It
 3. **Scientific correctness:** ENG-012 through ENG-016 and ENG-034. Resolve the volume contract, metric-scale feasibility, independent evaluation, model pinning, and drift evidence before claiming physical validity.
 4. **Identity and platform security:** ENG-021 through ENG-027. Build persistence, identity, API keys, authorization, metering, shared rate limits, and security controls as one coherent foundation.
 5. **Developer and commercial platform:** ENG-028 through ENG-033. Add versioned APIs, SDKs, sandbox semantics, jobs/webhooks, billing, portal, and operational controls only after their dependencies are stable.
-6. **Release and compliance review:** ENG-020 and ENG-035. Run the supported verification suite and complete legal/compliance review with qualified professionals.
+6. **Release and compliance review:** ENG-020 and ENG-035. Run the supported verification suite and complete legal/compliance review with qualified professionals. Website and provider integration work is tracked in ENG-036 through ENG-038.
 
 ## Scope discipline
 
