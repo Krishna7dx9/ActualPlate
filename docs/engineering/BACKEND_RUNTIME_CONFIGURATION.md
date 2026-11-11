@@ -6,7 +6,7 @@ The backend reads runtime configuration from environment variables. Deployment-s
 
 | Variable | Required | Description |
 |---|---|---|
-| APP_ENV | Recommended; set to production for production deployments | Runtime environment. The application uses development behavior outside production. |
+| APP_ENV | Required | Runtime environment. The application uses development behavior outside production. |
 | VISION_INFERENCE_ENDPOINT | Required | Absolute HTTP(S) URL for the vision worker. The backend fails startup when it is missing or malformed. |
 | VISION_API_TOKEN | Required when APP_ENV=production | Shared service-to-service token. Store it in a secret manager. |
 | CORS_ALLOWED_ORIGINS | Required for browser clients hosted on another origin | Comma-separated list of exact trusted origins, including scheme and optional port. An empty value denies cross-origin browser access. Wildcard origins are rejected in production. |
