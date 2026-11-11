@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import tempfile
-from collections.abc import Iterator
 from typing import Any
 
 import cv2
@@ -249,7 +248,7 @@ async def process_image(file: UploadFile) -> dict:
 
         return {
             "foods": nutrition_results,
-            "geometry": _clean_geometry(foods_data),
+            "geometry": foods_data,
             "vlm_output": detected_foods,
             "total_detected": len(foods_data),
             "total_nutrition": aggregate_nutrition(nutrition_results),
