@@ -253,5 +253,7 @@ def search_food(food_name: str) -> dict[str, Any]:
         if "error" in details:
             return details
         return normalize_food_response(details)
+    except FatSecretConfigurationError:
+        return {"error": "FatSecret integration is not configured."}
     except (requests.RequestException, RuntimeError):
         return {"error": "FatSecret is temporarily unavailable."}
