@@ -43,12 +43,14 @@ async def _worker_health() -> dict[str, object]:
             response = await client.get(_worker_url("/health"))
             response.raise_for_status()
             payload = response.json()
+        if not isinstance(payload, dict):
+            return {"status": "unavailable", "models_loaded": False}
         loaded = payload.get("models_loaded") is True
         return {
             "status": "ready" if loaded else "warming",
             "models_loaded": loaded,
         }
-    except (httpx.HTTPError, ValueError, TypeError):
+    except (httpx.HTTPError, ValueError, TypeError, AttributeError):
         return {"status": "unavailable", "models_loaded": False}
 
 
@@ -98,7 +100,7 @@ async def _perform_worker_warmup() -> dict[str, object]:
         )
         response.raise_for_status()
         payload = response.json()
-    if payload.get("models_loaded") is not True:
+    if not isinstance(payload, dict) or payload.get("models_loaded") is not True:
         raise RuntimeError("Vision worker did not report ready models.")
     return {"status": "ready", "models_loaded": True}
 
@@ -110,7 +112,7 @@ async def warmup(
 ):
     try:
         return await _perform_worker_warmup()
-    except (httpx.HTTPError, RuntimeError, ValueError, TypeError):
+    except (httpx.HTTPError, RuntimeError, ValueError, TypeError, AttributeError):
         logger.exception("Privileged vision worker warmup failed")
         raise HTTPException(
             status_code=503,
