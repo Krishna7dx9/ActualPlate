@@ -107,10 +107,17 @@ async def process_image(file: UploadFile):
 
         merged = {}
         for item in foods_data:
-            label = item.get("label", "").strip().lower()
-            vol = item.get("volume_cm3", 0.0)
-            if label and vol: 
-                merged[label] = merged.get(label, 0) + vol
+            label_value = item.get("label")
+            label = label_value.strip().lower() if isinstance(label_value, str) else ""
+            volume = item.get("volume_cm3")
+            if (
+                label
+                and isinstance(volume, (int, float))
+                and not isinstance(volume, bool)
+                and math.isfinite(volume)
+                and volume > 0
+            ):
+                merged[label] = merged.get(label, 0.0) + float(volume)
 
         nutrition_results, nutrition_errors, nutrition_status = _enrich_nutrition(detected_foods, merged)
 
@@ -214,10 +221,17 @@ async def process_image_stream(file):
 
         merged = {}
         for item in foods_data:
-            label = item.get("label", "").strip().lower()
-            vol = item.get("volume_cm3", 0.0)
-            if label and vol: 
-                merged[label] = merged.get(label, 0) + vol
+            label_value = item.get("label")
+            label = label_value.strip().lower() if isinstance(label_value, str) else ""
+            volume = item.get("volume_cm3")
+            if (
+                label
+                and isinstance(volume, (int, float))
+                and not isinstance(volume, bool)
+                and math.isfinite(volume)
+                and volume > 0
+            ):
+                merged[label] = merged.get(label, 0.0) + float(volume)
 
         yield f"data: {json.dumps({'step': 'nutrition', 'status': 'running', 'message': 'Fetching FatSecret...'})}\n\n"
         nutrition_results, nutrition_errors, nutrition_status = _enrich_nutrition(detected_foods, merged)
