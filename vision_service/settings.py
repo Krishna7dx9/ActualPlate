@@ -92,6 +92,10 @@ class VisionSettings:
     @classmethod
     def from_environment(cls) -> "VisionSettings":
         app_env = _required_text("APP_ENV").lower()
+        allowed_environments = {"development", "test", "production"}
+        if app_env not in allowed_environments:
+            allowed = ", ".join(sorted(allowed_environments))
+            raise ValueError(f"APP_ENV must be one of: {allowed}.")
         api_token = os.environ.get("VISION_API_TOKEN")
         api_token = api_token.strip() if api_token and api_token.strip() else None
 
