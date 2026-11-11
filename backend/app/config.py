@@ -45,8 +45,10 @@ class Settings:
     @classmethod
     def from_environment(cls) -> "Settings":
         environment = os.environ.get("APP_ENV", "development").strip().lower()
-        if not environment:
-            raise ValueError("APP_ENV must not be empty.")
+        allowed_environments = {"development", "test", "production"}
+        if environment not in allowed_environments:
+            allowed = ", ".join(sorted(allowed_environments))
+            raise ValueError(f"APP_ENV must be one of: {allowed}.")
 
         raw_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "")
         origins = tuple(
