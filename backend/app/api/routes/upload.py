@@ -5,7 +5,7 @@ import json
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, File, Request, UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
@@ -80,7 +80,6 @@ async def _metered_stream(file: UploadFile, usage_id: str):
 
 @router.post("/v1/scans")
 async def create_scan(
-    request: Request,
     file: UploadFile = File(...),
     principal: CurrentPrincipal = Depends(require_scope("scans:write")),
     db: Session = Depends(get_db),
@@ -113,7 +112,7 @@ async def create_scan(
                 "X-Usage-Remaining": "0",
             },
         )
-    except OrganizationUnavailable as exc:
+    except OrganizationUnavailable:
         return JSONResponse(
             status_code=403,
             content={"detail": "Organization access is disabled."},
