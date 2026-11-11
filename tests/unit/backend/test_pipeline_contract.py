@@ -28,7 +28,7 @@ def test_nutrition_is_not_requested_without_valid_density_or_volume():
         {"search_query": "bread", "density_g_cm3": 0.8},
     ]
     with patch("backend.app.services.pipeline.search_food") as search_food:
-        results, errors, status = _enrich_nutrition(foods, {"bread": None})
+        results, errors, status = _enrich_nutrition(foods, {"broccoli": 10.0, "bread": None})
 
     assert results == []
     assert status == "unavailable"
