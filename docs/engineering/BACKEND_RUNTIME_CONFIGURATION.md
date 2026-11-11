@@ -6,43 +6,43 @@ The backend reads runtime configuration from environment variables. Deployment-s
 
 | Variable | Required | Description |
 |---|---|---|
-| `APP_ENV` | Recommended; set to `production` in production deployments | Runtime environment. Defaults to `development` when unset. |
-| `VISION_INFERENCE_ENDPOINT` | Required | Absolute HTTP(S) URL for the vision worker. The backend fails startup when it is missing or malformed. |\n| `VISION_API_TOKEN` | Required when `APP_ENV=production` | Shared service-to-service token. Store it in a secret manager. |\n| `CORS_ALLOWED_ORIGINS` | Required for browser clients hosted on another origin | Comma-separated list of exact trusted origins, including scheme and optional port. An empty value denies cross-origin browser access. Wildcard origins are rejected in production. |
-| `VISION_API_TOKEN` | Required when `APP_ENV=production` | Shared service-to-service token used by the backend's vision worker integration. Store it in a secret manager. |
-| `MAX_UPLOAD_BYTES` | Required | Maximum encoded image-file size in bytes. Must be a positive integer. |\n| `MAX_REQUEST_BODY_BYTES` | Required | Maximum total HTTP request body size, including multipart framing. Must be greater than or equal to `MAX_UPLOAD_BYTES`. |
-| `MAX_IMAGE_PIXELS` | Required | Maximum decoded image pixel count (width × height). Must be a positive integer. |
+| APP_ENV | Recommended; set to production for production deployments | Runtime environment. The application uses development behavior outside production. |
+| VISION_INFERENCE_ENDPOINT | Required | Absolute HTTP(S) URL for the vision worker. The backend fails startup when it is missing or malformed. |
+| VISION_API_TOKEN | Required when APP_ENV=production | Shared service-to-service token. Store it in a secret manager. |
+| CORS_ALLOWED_ORIGINS | Required for browser clients hosted on another origin | Comma-separated list of exact trusted origins, including scheme and optional port. An empty value denies cross-origin browser access. Wildcard origins are rejected in production. |
+| MAX_UPLOAD_BYTES | Required | Maximum encoded image-file size in bytes. Must be a positive integer. |
+| MAX_REQUEST_BODY_BYTES | Required | Maximum total HTTP request body size, including multipart framing. Must be greater than or equal to MAX_UPLOAD_BYTES. |
+| MAX_IMAGE_PIXELS | Required | Maximum decoded image pixel count (width × height). Must be a positive integer. |
+| OPENROUTER_API_KEY | Required for food recognition; required at startup in production | Provider credential for food recognition. Store it in a secret manager. |
+| FATSECRET_CLIENT_ID | Required for nutrition lookup | Nutrition-provider client ID. Store it in a secret manager. |
+| FATSECRET_CLIENT_SECRET | Required for nutrition lookup | Nutrition-provider client secret. Store it in a secret manager. |
 
-## CORS examples
+## CORS and local examples
 
-For local development, configure the exact frontend origin used by the developer:
+For local development, configure the actual frontend origin and the local vision-worker endpoint:
 
 ```text
 APP_ENV=development
+VISION_INFERENCE_ENDPOINT=http://127.0.0.1:8001
 CORS_ALLOWED_ORIGINS=http://localhost:3000
+MAX_UPLOAD_BYTES=10485760
+MAX_REQUEST_BODY_BYTES=12582912
+MAX_IMAGE_PIXELS=40000000
 ```
 
-For production, configure the deployed frontend origin:
+These numeric values are examples for local development only. Choose limits based on the deployed service's memory, CPU, inference capacity, and ingress configuration.
 
-```text
-APP_ENV=production
-CORS_ALLOWED_ORIGINS=https://app.example.com
-VISION_API_TOKEN=<provided-by-secret-manager>
-MAX_UPLOAD_BYTES=<deployment-specific-positive-integer>
-MAX_IMAGE_PIXELS=<deployment-specific-positive-integer>
-```
-
-The example host is illustrative; replace it with the actual deployed origin. Do not use the example value as a production configuration.
+For production, set APP_ENV=production, configure the deployed worker endpoint and exact frontend origin, provide VISION_API_TOKEN and OPENROUTER_API_KEY through a secret manager, and set all resource limits explicitly.
 
 ## Security behavior
 
 - The backend does not enable credentialed CORS.
 - The backend CORS middleware owns preflight handling; upload routes do not manually emit wildcard CORS headers.
 - An empty origin allowlist is a deny-by-default configuration.
-- Upload byte and pixel limits are mandatory configuration; the application does not silently choose deployment limits. The ASGI middleware rejects oversized bodies before multipart parsing, and upload validation separately checks the file payload and decoded pixel count.
-- Production rejects wildcard CORS origins.
-- The vision service rejects production startup when VISION_API_TOKEN is missing.
+- Production rejects wildcard CORS origins and fails startup if the vision token or endpoint is missing.
+- The ASGI middleware rejects oversized request bodies before multipart parsing. Upload validation separately checks file bytes, supported decoded formats, and pixel count.
 - Public error responses do not include raw exception messages. Detailed diagnostics belong in access-controlled server logs.
 
 ## Deployment verification
 
-After setting the variables, verify application startup and test a preflight request from the exact deployed frontend origin. Also verify that an untrusted origin receives no permissive Access-Control-Allow-Origin response header.
+After setting the variables, verify application startup and test a preflight request from the exact deployed frontend origin. Also verify that an untrusted origin receives no permissive Access-Control-Allow-Origin response header. Configure a reverse proxy or ingress request-body limit as defense in depth.
