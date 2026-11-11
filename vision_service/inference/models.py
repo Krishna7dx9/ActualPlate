@@ -13,31 +13,20 @@ the service loads once and serves many requests.
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import torch
+
+from vision_service.settings import settings
 
 # --------------------------------------------------------------------
 # Configuration
 # --------------------------------------------------------------------
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-GROUNDING_DINO_MODEL_ID = os.environ.get(
-    "GROUNDING_DINO_MODEL_ID",
-    "IDEA-Research/grounding-dino-base",
-)
-
-SAM2_MODEL_ID = os.environ.get(
-    "SAM2_MODEL_ID",
-    "facebook/sam2-hiera-large",
-)
-
-# MoGe-2 (MIT License) for metric monocular depth.
-MOGE_MODEL_ID = os.environ.get(
-    "MOGE_MODEL_ID",
-    "Ruicheng/moge-2-vitl-normal",
-)
+GROUNDING_DINO_MODEL_ID = settings.grounding_dino_model_id
+SAM2_MODEL_ID = settings.sam2_model_id
+MOGE_MODEL_ID = settings.moge_model_id
 
 # --------------------------------------------------------------------
 # Lazy-loaded singletons
