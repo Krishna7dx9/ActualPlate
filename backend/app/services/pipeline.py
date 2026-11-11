@@ -2,6 +2,7 @@ import os
 import tempfile
 import json
 import math
+import logging
 import cv2
 import base64
 import numpy as np
@@ -14,6 +15,30 @@ from vision_service.recognition.food_recognition import detect_food
 from vision_service.detection.grounding_dino_detector import GroundingDINODetector
 
 detector = GroundingDINODetector()
+logger = logging.getLogger(__name__)
+
+
+def _build_scale_map(foods):
+    scale_map = {}
+    for food in foods:
+        label = food.get("search_query")
+        if not isinstance(label, str) or not label.strip():
+            continue
+        dimensions = {}
+        for source_key, target_key in (
+            ("estimated_thickness_cm", "thickness"),
+            ("estimated_diameter_cm", "diameter"),
+        ):
+            value = food.get(source_key)
+            if (
+                isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and math.isfinite(value)
+                and value > 0
+            ):
+                dimensions[target_key] = float(value)
+        scale_map[label.strip().lower()] = dimensions
+    return scale_map
 
 async def process_image(file: UploadFile):
     image = await file.read()
