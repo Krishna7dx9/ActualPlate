@@ -25,7 +25,9 @@ test('FatSecret attribution and terms links are present', () => {
   assert.match(html, /https:\/\/platform\.fatsecret\.com\/attribution/);
 });
 
-test('demo handles missing numerical values without converting them to zero', () => {
+test('demo handles empty streams and partial nutrition without inventing totals', () => {
+  assert.match(html, /parsed\.step===\"complete\"&&!parsed\.final/);
+  assert.match(html, /hasUsableNutrition/);
   assert.match(html, /Not available/);
   assert.match(html, /Number\.isFinite\(value\)/);
 });
