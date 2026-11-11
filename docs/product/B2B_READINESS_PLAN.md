@@ -163,6 +163,6 @@ This plan is the implementation backlog for ActualPlate's public website, image-
 - [x] Avoid rendering missing numeric outputs as zero.
 - [x] Add FatSecret attribution and links to the current official terms and attribution policy.
 - [x] Add dependency-free frontend build contract tests and a dedicated Web CI workflow.
-- [ ] Confirm the Web CI run passes on the pull request head.
+- [x] Confirm the Web CI run passes on PR #62 head `0c59f3e` (Web CI and Python CI passed).
 - [ ] Review current FatSecret client error handling, OAuth token lifecycle, normalization, and integration tests in a separate backend PR.
 - [ ] Verify the live hosted website and deployed API configuration after repository changes are reviewed and deployed.
