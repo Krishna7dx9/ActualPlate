@@ -58,6 +58,11 @@ class FoodDetection:
     bbox: list[float] | None = None
     mask_b64: str | None = None
 
+    @property
+    def depth_m(self) -> dict:
+        """Deprecated compatibility alias; values are not measured in meters."""
+        return self.depth_stats
+
 
 @dataclass
 class InferenceResult:
