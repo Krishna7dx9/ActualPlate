@@ -124,7 +124,7 @@ def test_api_key_is_shown_once_scoped_and_revocable(client):
     assert create.status_code == 201, create.text
     key_payload = create.json()
     raw_key = key_payload["key"]
-    assert raw_key.startswith("ap_test_")
+    assert raw_key.startswith("ap_dev_")
     assert key_payload["key_prefix"]
     assert "key_hash" not in key_payload
 
