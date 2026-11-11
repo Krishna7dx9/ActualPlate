@@ -113,31 +113,23 @@ class VisionSettings:
 
         openrouter_key = os.environ.get("OPENROUTER_API_KEY")
         openrouter_key = openrouter_key.strip() if openrouter_key and openrouter_key.strip() else None
+        if app_env == "production" and not openrouter_key:
+            raise ValueError(
+                "OPENROUTER_API_KEY must be configured when APP_ENV=production."
+            )
 
         return cls(
             app_env=app_env,
             api_token=api_token,
             inference_endpoint=endpoint,
-            request_timeout_seconds=_positive_float(
-                "VISION_REQUEST_TIMEOUT_SECONDS",
-            ),
+            request_timeout_seconds=_positive_float("VISION_REQUEST_TIMEOUT_SECONDS"),
             openrouter_api_key=openrouter_key,
             openrouter_base_url=base_url,
-            openrouter_model=_required_text(
-                "OPENROUTER_MODEL",
-                ),
-            openrouter_max_tokens=_positive_int(
-                "OPENROUTER_MAX_TOKENS",
-            ),
-            grounding_dino_model_id=_required_text(
-                "GROUNDING_DINO_MODEL_ID",
-            ),
-            sam2_model_id=_required_text(
-                "SAM2_MODEL_ID",
-            ),
-            moge_model_id=_required_text(
-                "MOGE_MODEL_ID",
-            ),
+            openrouter_model=_required_text("OPENROUTER_MODEL"),
+            openrouter_max_tokens=_positive_int("OPENROUTER_MAX_TOKENS"),
+            grounding_dino_model_id=_required_text("GROUNDING_DINO_MODEL_ID"),
+            sam2_model_id=_required_text("SAM2_MODEL_ID"),
+            moge_model_id=_required_text("MOGE_MODEL_ID"),
             box_threshold=_threshold("BOX_THRESHOLD"),
             text_threshold=_threshold("TEXT_THRESHOLD"),
             show_visualizations=_boolean("SHOW_VISUALIZATIONS"),
