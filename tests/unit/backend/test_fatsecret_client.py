@@ -145,3 +145,7 @@ def test_expired_bearer_token_is_refreshed_once(mock_get, mock_get_token):
     assert mock_get.call_count == 3
     assert mock_get.call_args_list[0].kwargs["headers"]["Authorization"] == "Bearer expired-token"
     assert mock_get.call_args_list[1].kwargs["headers"]["Authorization"] == "Bearer fresh-token"
+
+def test_normalize_food_response_rejects_boolean_nutrient():
+    result = normalize_food_response(_food_details(calories=True))
+    assert result["error"] == "FatSecret serving contains invalid nutrition values."
