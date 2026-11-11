@@ -1,7 +1,7 @@
 """Validated backend runtime configuration.
 
-Configuration is read from the process environment once at application
-initialization. Keep deployment-specific origins out of source control.
+Deployment-specific values are read from the process environment. No
+credentials, hostnames, or resource limits are embedded in application code.
 """
 
 from __future__ import annotations
@@ -10,12 +10,29 @@ import os
 from dataclasses import dataclass
 
 
+def _required_positive_integer(name: str) -> int:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        raise ValueError(f"{name} must be configured.")
+
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a positive integer.") from exc
+
+    if value <= 0:
+        raise ValueError(f"{name} must be a positive integer.")
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
-    """Runtime settings required by the backend application."""
+    """Validated runtime settings required by the backend application."""
 
     environment: str
     cors_allowed_origins: tuple[str, ...]
+    max_upload_bytes: int
+    max_image_pixels: int
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -38,6 +55,8 @@ class Settings:
         return cls(
             environment=environment,
             cors_allowed_origins=origins,
+            max_upload_bytes=_required_positive_integer("MAX_UPLOAD_BYTES"),
+            max_image_pixels=_required_positive_integer("MAX_IMAGE_PIXELS"),
         )
 
 
