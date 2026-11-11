@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from backend.app.main import app
 
 client = TestClient(app)
@@ -33,3 +33,22 @@ def test_invalid_file():
     )
     assert response.status_code == 400
     assert response.json() == {"error": "Only image files allowed"}
+
+
+def test_unhandled_exception_does_not_expose_internal_details():
+    """Public API errors must not disclose exception messages."""
+    safe_client = TestClient(app, raise_server_exceptions=False)
+
+    with patch(
+        "backend.app.api.routes.upload.process_image",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("upstream credential leaked"),
+    ):
+        response = safe_client.post(
+            "/upload-image",
+            files={"file": ("image.jpg", b"placeholder", "image/jpeg")},
+        )
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Internal Server Error"}
+    assert "credential" not in response.text
