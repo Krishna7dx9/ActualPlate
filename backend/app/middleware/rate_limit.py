@@ -30,7 +30,11 @@ class RateLimitMiddleware:
         self.app = app
 
     async def __call__(self, scope: dict[str, Any], receive, send) -> None:
-        if scope["type"] != "http" or scope.get("method") == "OPTIONS":
+        if (
+            scope["type"] != "http"
+            or scope.get("method") == "OPTIONS"
+            or scope.get("path") in {"/v1/system/health", "/v1/system/ready"}
+        ):
             await self.app(scope, receive, send)
             return
 
