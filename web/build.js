@@ -17,7 +17,7 @@ if (parsedApiBase.username || parsedApiBase.password || parsedApiBase.search || 
   throw new Error('VITE_API_URL must not contain credentials, query parameters, or a fragment.');
 }
 
-const apiBase = parsedApiBase.toString().replace(/\\/$/, '');
+const apiBase = parsedApiBase.toString().replace(/\/$/, '');
 const templatePath = path.join(process.cwd(), 'index.html');
 const outputDir = path.join(process.cwd(), 'dist');
 const outputPath = path.join(outputDir, 'index.html');
