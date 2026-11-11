@@ -17,7 +17,6 @@ No HTTP, no FastAPI, no request handling. That is api.py's job.
 
 from __future__ import annotations
 
-import os
 import base64
 from dataclasses import dataclass, field
 
@@ -25,6 +24,8 @@ import cv2
 import numpy as np
 import torch
 from PIL import Image
+
+from vision_service.settings import settings
 
 from vision_service.inference.models import (
     DEVICE,
@@ -34,13 +35,9 @@ from vision_service.inference.models import (
 )
 
 
-SHOW_VISUALIZATIONS = (
-    os.environ.get("SHOW_VISUALIZATIONS", "false").lower() == "true"
-)
-
-BOX_THRESHOLD = float(os.environ.get("BOX_THRESHOLD", "0.35"))
-TEXT_THRESHOLD = float(os.environ.get("TEXT_THRESHOLD", "0.25"))
-
+SHOW_VISUALIZATIONS = settings.show_visualizations
+BOX_THRESHOLD = settings.box_threshold
+TEXT_THRESHOLD = settings.text_threshold
 
 @dataclass
 class FoodDetection:
