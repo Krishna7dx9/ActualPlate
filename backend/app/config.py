@@ -41,6 +41,10 @@ class Settings:
     max_upload_bytes: int
     max_request_body_bytes: int
     max_image_pixels: int
+    database_url: str
+    jwt_secret_key: str | None
+    api_key_hash_secret: str | None
+    access_token_ttl_seconds: int
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -93,6 +97,32 @@ class Settings:
                 "MAX_UPLOAD_BYTES."
             )
 
+
+        database_url = os.environ.get(
+            "DATABASE_URL",
+            "sqlite:///:memory:" if environment == "test" else "sqlite:///./actualplate.db",
+        ).strip()
+        parsed_database_url = urlparse(database_url)
+        if parsed_database_url.scheme not in {"sqlite", "postgresql", "postgresql+psycopg"}:
+            raise ValueError("DATABASE_URL must use SQLite or PostgreSQL.")
+        if environment == "production" and parsed_database_url.scheme == "sqlite":
+            raise ValueError("DATABASE_URL must use PostgreSQL when APP_ENV=production.")
+
+        jwt_secret_key = os.environ.get("JWT_SECRET_KEY", "").strip() or None
+        api_key_hash_secret = os.environ.get("API_KEY_HASH_SECRET", "").strip() or None
+        if environment == "production":
+            if not jwt_secret_key or len(jwt_secret_key.encode("utf-8")) < 32:
+                raise ValueError("JWT_SECRET_KEY must contain at least 32 bytes in production.")
+            if not api_key_hash_secret or len(api_key_hash_secret.encode("utf-8")) < 32:
+                raise ValueError("API_KEY_HASH_SECRET must contain at least 32 bytes in production.")
+
+        try:
+            access_token_ttl_seconds = int(os.environ.get("ACCESS_TOKEN_TTL_SECONDS", "900"))
+        except ValueError as exc:
+            raise ValueError("ACCESS_TOKEN_TTL_SECONDS must be a positive integer.") from exc
+        if not 60 <= access_token_ttl_seconds <= 3600:
+            raise ValueError("ACCESS_TOKEN_TTL_SECONDS must be between 60 and 3600.")
+
         return cls(
             environment=environment,
             cors_allowed_origins=origins,
@@ -101,6 +131,10 @@ class Settings:
             max_upload_bytes=max_upload_bytes,
             max_request_body_bytes=max_request_body_bytes,
             max_image_pixels=_required_positive_integer("MAX_IMAGE_PIXELS"),
+            database_url=database_url,
+            jwt_secret_key=jwt_secret_key,
+            api_key_hash_secret=api_key_hash_secret,
+            access_token_ttl_seconds=access_token_ttl_seconds,
         )
 
 
