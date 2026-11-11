@@ -31,10 +31,10 @@ def utc_now() -> datetime:
 
 class User(Base):
     __tablename__ = "users"
-    __table_args__ = (Index("ix_users_email_active", "email", "is_active"),)
+    __table_args__ = (\n        UniqueConstraint("email", name="uq_users_email"),\n        Index("ix_users_email_active", "email", "is_active"),\n    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -48,7 +48,7 @@ class Plan(Base):
     __tablename__ = "plans"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    code: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
+    code: Mapped[str] = mapped_column(String(32), nullable=False)
     daily_request_limit: Mapped[int] = mapped_column(Integer, nullable=False)
     features: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -57,11 +57,11 @@ class Plan(Base):
 
 class Organization(Base):
     __tablename__ = "organizations"
-    __table_args__ = (Index("ix_organizations_active_plan", "is_active", "plan_id"),)
+    __table_args__ = (\n        UniqueConstraint("slug", name="uq_organizations_slug"),\n        Index("ix_organizations_active_plan", "is_active", "plan_id"),\n    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
-    slug: Mapped[str] = mapped_column(String(180), nullable=False, unique=True)
+    slug: Mapped[str] = mapped_column(String(180), nullable=False)
     plan_id: Mapped[str] = mapped_column(ForeignKey("plans.id", ondelete="RESTRICT"), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
