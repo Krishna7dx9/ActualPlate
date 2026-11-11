@@ -105,7 +105,15 @@ def _get_client() -> OpenAI:
             "https://openrouter.ai/api/v1",
         ).strip()
         parsed = urlparse(base_url)
-        if parsed.scheme not in {"https", "http"} or not parsed.netloc or parsed.username or parsed.password:
+        if (
+            parsed.scheme not in {"https", "http"}
+            or not parsed.netloc
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+            or (os.environ.get("APP_ENV", "development").strip().lower() == "production" and parsed.scheme != "https")
+        ):
             raise RecognitionConfigurationError("OPENROUTER_BASE_URL must be an absolute HTTP(S) URL without credentials.")
 
         try:
