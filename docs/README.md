@@ -1,10 +1,17 @@
 # ActualPlate Documentation
 
-Welcome to the engineering documentation for ActualPlate. This directory contains the architectural blueprints, decision records, and operational guides for the AI Food Volume Estimation system.
+Engineering documentation for the ActualPlate food-volume estimation system.
 
-## Navigation
-- [System Overview](architecture/system-overview.md): High-level architecture and microservice boundaries.
-- [Inference Pipeline](architecture/inference-pipeline.md): Step-by-step data flow through the ML models.
-- [Architecture Decisions](decisions/): ADRs explaining critical technical pivots.
-- [Known Limitations](KNOWN_LIMITATIONS.md): Honest assessment of ML accuracy bounds.
-- [Deployment Guide](DEPLOYMENT.md): How to run the system locally and in the cloud.
+## Architecture
+
+- [System Overview](architecture/system-overview.md): current high-level service boundaries.
+- [Inference Pipeline](architecture/inference-pipeline.md): vision processing flow and data handoffs.
+- [Architecture Decisions](decisions/): recorded technical decisions.
+
+## Engineering program
+
+- [Engineering Baseline Audit](engineering/ENGINEERING_BASELINE_AUDIT.md): verified repository findings and risks.
+- [Implementation Roadmap](engineering/IMPLEMENTATION_ROADMAP.md): prioritized workstreams and acceptance criteria.
+- [Benchmark Baseline](benchmarks/BASELINE.md): existing benchmark context.
+
+Only link to documents tracked in the repository. Deployment and limitation guides will be linked here when their contents are authored and reviewed.
