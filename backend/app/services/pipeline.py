@@ -51,14 +51,7 @@ async def process_image(file: UploadFile):
         detected_foods = detect_food(image)
         if not detected_foods: return {"error": "Food not detected"}
 
-        # Build a scale map for ALL foods
-        scale_map = {
-            food["search_query"].strip().lower(): {
-                "thickness": food.get("estimated_thickness_cm"),
-                "diameter": food.get("estimated_diameter_cm")
-            }
-            for food in detected_foods
-        }
+        scale_map = _build_scale_map(detected_foods)
         
         detections = detector.detect(
             image_path=image_path, 
@@ -119,14 +112,7 @@ async def process_image_stream(file):
 
         yield f"data: {json.dumps({'step': 'dino', 'status': 'running', 'message': 'Running DINO, SAM2, and 3D Math...'})}\n\n"
         
-        # Build a scale map for ALL foods
-        scale_map = {
-            food["search_query"].strip().lower(): {
-                "thickness": food.get("estimated_thickness_cm"),
-                "diameter": food.get("estimated_diameter_cm")
-            }
-            for food in detected_foods
-        }
+        scale_map = _build_scale_map(detected_foods)
         
         detections = detector.detect(
             image_path=image_path, 
