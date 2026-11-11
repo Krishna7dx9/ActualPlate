@@ -239,6 +239,12 @@ async def detect(
             )
 
             if has_candidate_dimensions:
+                food_record["volume_status"] = "unvalidated"
+                food_record["volume_reason"] = (
+                    "Volume uses VLM-estimated dimensions without "
+                    "independent metric calibration."
+                )
+
                 food_depth = result.depth_map[mask]
                 food_depth = food_depth[np.isfinite(food_depth)]
 
@@ -249,6 +255,14 @@ async def detect(
                     and len(bbox) == 4
                     and float(bbox[2]) > float(bbox[0])
                 ):
+                    estimated_cm_per_pixel = (
+                        float(estimated_diameter)
+                        / float(bbox[2] - bbox[0])
+                    )
+                    food_record["experimental_scale_factor_cm_per_px"] = (
+                        estimated_cm_per_pixel
+                    )
+
                     min_depth = float(np.min(food_depth))
                     max_depth = float(np.max(food_depth))
                     if max_depth > min_depth:
@@ -259,21 +273,9 @@ async def detect(
                         estimated_height = (
                             normalized * float(estimated_thickness)
                         )
-                        estimated_cm_per_pixel = (
-                            float(estimated_diameter)
-                            / float(bbox[2] - bbox[0])
-                        )
                         food_record["experimental_volume_cm3"] = float(
                             np.sum(estimated_height[mask])
                             * estimated_cm_per_pixel ** 2
-                        )
-                        food_record["experimental_scale_factor_cm_per_px"] = (
-                            estimated_cm_per_pixel
-                        )
-                        food_record["volume_status"] = "unvalidated"
-                        food_record["volume_reason"] = (
-                            "Volume uses VLM-estimated dimensions without "
-                            "independent metric calibration."
                         )
 
             if include_arrays:
