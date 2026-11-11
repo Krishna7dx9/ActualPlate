@@ -52,12 +52,12 @@ from fastapi.responses import JSONResponse
 
 from vision_service.inference.inference import detect_and_measure
 from vision_service.inference.models import models_loaded
+from vision_service.settings import settings
 from vision_service.inference.volume import estimate_volume_cm3
 
 
-APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
-VISION_API_TOKEN = os.environ.get("VISION_API_TOKEN")
-VISION_API_TOKEN = VISION_API_TOKEN.strip() if VISION_API_TOKEN else None
+APP_ENV = settings.app_env
+VISION_API_TOKEN = settings.api_token
 
 
 def _validate_auth_configuration(
@@ -74,7 +74,7 @@ def _validate_auth_configuration(
 _validate_auth_configuration(APP_ENV, VISION_API_TOKEN)
 
 # Maximum side length for arrays returned when include_arrays=true.
-MAX_ARRAY_SIDE = 512
+MAX_ARRAY_SIDE = settings.max_array_side
 
 app = FastAPI(
     title="ActualPlate Vision API",
