@@ -316,8 +316,11 @@ def test_health_and_readiness_report_dependency_state(client, monkeypatch):
     monkeypatch.setattr("backend.app.api.routes.system._worker_health", ready_worker)
     monkeypatch.setattr("backend.app.api.routes.system.rate_limiter.health", local_limiter)
 
+    live = client.get("/v1/system/live")
     health = client.get("/v1/system/health")
     ready = client.get("/v1/system/ready")
+    assert live.status_code == 200
+    assert live.json()["status"] == "alive"
     assert health.status_code == 200
     assert health.json()["components"]["database"]["status"] == "ok"
     assert health.json()["components"]["vision_worker"]["models_loaded"] is True
