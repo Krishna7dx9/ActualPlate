@@ -70,9 +70,13 @@ if not VISION_API_TOKEN:
 MAX_ARRAY_SIDE = 512
 logger = logging.getLogger(__name__)
 
+_environment = os.environ.get("APP_ENV", "development").strip().lower()
 app = FastAPI(
     title="ActualPlate Vision API",
     version="1.0.0",
+    docs_url=None if _environment == "production" else "/docs",
+    redoc_url=None if _environment == "production" else "/redoc",
+    openapi_url=None if _environment == "production" else "/openapi.json",
 )
 
 
