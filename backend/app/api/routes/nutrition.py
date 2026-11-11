@@ -29,7 +29,7 @@ def nutrition(
         message = nutrition_data["error"]
         if message == "Food not found.":
             status_code = 404
-        elif message == "FatSecret is temporarily unavailable.":
+        elif message in {"FatSecret is temporarily unavailable.", "FatSecret integration is not configured.", "FatSecret request limit reached."}:
             status_code = 503
         else:
             status_code = 502
