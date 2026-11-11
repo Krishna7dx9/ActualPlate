@@ -8,7 +8,7 @@ import numpy as np
 # Set the token before importing the app to pass startup validation
 os.environ["VISION_API_TOKEN"] = "test-token"
 
-from vision_service.inference.api import app
+from vision_service.inference.api import app, _validate_auth_configuration
 
 client = TestClient(app)
 
@@ -84,3 +84,19 @@ def test_vision_api_rejects_invalid_token():
 
     assert response.status_code == 401
     assert response.json()["detail"] == "Invalid API token."
+
+
+def test_vision_auth_is_optional_outside_production():
+    """Development/test deployments may run without a service token."""
+    _validate_auth_configuration("development", None)
+
+
+def test_vision_auth_is_required_in_production():
+    """Production startup must fail closed when the service token is absent."""
+    with pytest.raises(RuntimeError, match="VISION_API_TOKEN"):
+        _validate_auth_configuration("production", None)
+
+
+def test_vision_auth_accepts_configured_production_token():
+    """A configured production token satisfies the startup contract."""
+    _validate_auth_configuration("production", "configured-token")
