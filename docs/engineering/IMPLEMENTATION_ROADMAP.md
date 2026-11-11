@@ -23,8 +23,8 @@ This roadmap is the execution record for the engineering improvement program. It
 | ENG-006 | API error contract and logging | P1 | Stable public errors; details logged safely; no raw exception leakage | PR #56 open; Python CI passing |
 | ENG-007 | CORS policy | P1 | Explicit environment configuration; restrictive default; no wildcard policy in production | PR #56 open; Python CI passing |
 | ENG-008 | Upload request limits and decoding | P0 | Bounded request/file handling; actual image decoding; supported-format policy and resource-limit tests | PR #56 open; Python CI passing |
-| ENG-009 | Backend execution/concurrency | P1 | Blocking work isolated with bounded capacity; cancellation and shutdown behavior tested | PR #57 open; latest CI run pending |
-| ENG-010 | Provider failure semantics | P1 | Nutrition-provider failures visible as structured partial failures; no silent broad exception swallowing | PR #57 open; latest CI run pending |
+| ENG-009 | Backend execution/concurrency | P1 | Blocking work isolated with bounded capacity; cancellation and shutdown behavior tested | PR #57 open; Python CI passing |
+| ENG-010 | Provider failure semantics | P1 | Nutrition-provider failures visible as structured partial failures; no silent broad exception swallowing | PR #57 open; Python CI passing |
 | ENG-011 | Service API contract | P1 | Typed request/response models and contract tests shared across service boundary | Not started |
 | ENG-012 | Vision volume semantics | P0 | Response distinguishes relative geometry, metric scale evidence, estimate, uncertainty, and validity | PR #60 open; Python CI passing |
 | ENG-013 | Single authoritative volume path | P0 | One production volume path; deprecated alternatives removed or explicitly diagnostic | PR #60 open; Python CI passing |
@@ -33,7 +33,7 @@ This roadmap is the execution record for the engineering improvement program. It
 | ENG-016 | Vision model lifecycle | P1 | Lazy loading, readiness/liveness, device selection, and resource ownership tested | Partial; GPU model-load verification not run |
 | ENG-017 | Data persistence assessment | P2 | Storage requirements and data lifecycle documented before introducing a database | Not started |
 | ENG-018 | Production observability | P2 | Structured logs, request correlation, health semantics, and actionable metrics | Partial; request IDs and structured failure codes exist, broader metrics pending |
-| ENG-019 | Deployment hardening | P2 | Reproducible image, non-root runtime where feasible, health checks, resource policy, and deployment guide | PR #61 adds dependency separation and Docker build CI; runtime hardening remains |
+| ENG-019 | Deployment hardening | P2 | Reproducible image, non-root runtime where feasible, health checks, resource policy, and deployment guide | PR #61 adds dependency separation and Docker build CI; Docker build verification pending; runtime hardening remains |
 | ENG-020 | Final engineering verification | P0 | Full supported test suite, image build, security checks, and known limitations recorded | Not started |
 
 ## Execution sequence
