@@ -96,6 +96,39 @@ def test_api_applies_per_food_scale_map(mock_detect_and_measure, mock_inference_
 
 
 @patch("vision_service.inference.api.detect_and_measure")
+def test_experimental_volume_ignores_nonfinite_depth_pixels(
+    mock_detect_and_measure,
+    mock_inference_result,
+):
+    """Invalid depth pixels must not turn diagnostic volume into NaN or infinity."""
+    mock_inference_result.depth_map = np.tile(
+        np.linspace(1.0, 2.0, 500, dtype=np.float32),
+        (500, 1),
+    )
+    mock_inference_result.depth_map[0, 0] = np.nan
+    mock_detect_and_measure.return_value = mock_inference_result
+
+    response = client.post(
+        "/detect",
+        files={"file": ("test.jpg", io.BytesIO(b"fake image bytes"), "image/jpeg")},
+        data={
+            "labels": "burger",
+            "scale_map": json.dumps(
+                {"burger": {"thickness": 5.0, "diameter": 10.0}}
+            ),
+        },
+        headers={"x-api-token": "test-token"},
+    )
+
+    assert response.status_code == 200
+    food = response.json()["foods"][0]
+    assert food["volume_cm3"] is None
+    assert food["volume_status"] == "unvalidated"
+    assert np.isfinite(food["experimental_volume_cm3"])
+    assert food["experimental_volume_cm3"] > 0
+
+
+@patch("vision_service.inference.api.detect_and_measure")
 def test_include_arrays_keeps_visualization_mask_png_compatible(
     mock_detect_and_measure,
     mock_inference_result,
