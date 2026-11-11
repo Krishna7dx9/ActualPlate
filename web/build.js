@@ -40,4 +40,9 @@ if (html.includes('{{API_') || html.includes('undefined/upload-image-stream')) {
 
 fs.mkdirSync(outputDir, { recursive: true });
 fs.writeFileSync(outputPath, html, 'utf8');
+
+const headersSource = path.join(process.cwd(), '_headers');
+if (fs.existsSync(headersSource)) {
+  fs.copyFileSync(headersSource, path.join(outputDir, '_headers'));
+}
 console.log(`Built web/dist/index.html with API base ${apiBase}`);
