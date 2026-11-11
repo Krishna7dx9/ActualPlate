@@ -7,7 +7,7 @@ The backend reads runtime configuration from environment variables. Deployment-s
 | Variable | Required | Description |
 |---|---|---|
 | `APP_ENV` | Recommended; set to `production` in production deployments | Runtime environment. Defaults to `development` when unset. |
-| `CORS_ALLOWED_ORIGINS` | Required for browser clients hosted on another origin | Comma-separated list of exact trusted origins, including scheme and optional port. An empty value denies cross-origin browser access. Wildcard origins are rejected in production. |
+| `VISION_INFERENCE_ENDPOINT` | Required | Absolute HTTP(S) URL for the vision worker. The backend fails startup when it is missing or malformed. |\n| `VISION_API_TOKEN` | Required when `APP_ENV=production` | Shared service-to-service token. Store it in a secret manager. |\n| `CORS_ALLOWED_ORIGINS` | Required for browser clients hosted on another origin | Comma-separated list of exact trusted origins, including scheme and optional port. An empty value denies cross-origin browser access. Wildcard origins are rejected in production. |
 | `VISION_API_TOKEN` | Required when `APP_ENV=production` | Shared service-to-service token used by the backend's vision worker integration. Store it in a secret manager. |
 | `MAX_UPLOAD_BYTES` | Required | Maximum encoded image-file size in bytes. Must be a positive integer. |\n| `MAX_REQUEST_BODY_BYTES` | Required | Maximum total HTTP request body size, including multipart framing. Must be greater than or equal to `MAX_UPLOAD_BYTES`. |
 | `MAX_IMAGE_PIXELS` | Required | Maximum decoded image pixel count (width × height). Must be a positive integer. |
