@@ -7,8 +7,8 @@ Accepted
 When the VLM label (e.g., "corn on the cob") failed to match the DINO label (e.g., "corn"), the API fell back to a raw point-cloud volume calculation. Because MoGe-2 absolute scale is hallucinated, this returned mathematically impossible volumes up to 158 Billion cm³.
 
 ## Decision
-We removed the absolute-scale fallback. We implemented a safe alias-matching dictionary (e.g., "corn" -> "corn on the cob"). If a label still fails to match, the API fails safely by returning `volume_status: "unreliable"` and `volume_cm3: None`.
+We removed the catastrophic absolute-scale fallback and retained controlled label aliasing. However, a VLM-derived diameter/thickness heuristic remained in the API and was incorrectly marked valid. ADR-0003 supersedes that behavior: VLM estimates are diagnostic only, and authoritative volume remains null until metric scale evidence is independently validated.
 
 ## Consequences
-- **Pros:** Eradicated catastrophic data errors. It is better for a B2B client to receive a null value than a wrong one.
-- **Cons:** System coverage drops slightly if VLM and DINO disagree fundamentally.
+- **Pros:** The service must prefer a null physical measurement to a fabricated or unvalidated one.
+- **Cons:** Physical volume and dependent nutrition coverage remain limited until a validated metric scale source is available.

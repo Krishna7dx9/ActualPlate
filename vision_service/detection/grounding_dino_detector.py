@@ -4,7 +4,7 @@ import logging
 
 import requests
 
-from vision_service.config import VISION_INFERENCE_ENDPOINT
+from vision_service.settings import settings
 from vision_service.detection.detector import BaseDetector
 
 
@@ -15,17 +15,14 @@ class GroundingDINODetector(BaseDetector):
     """HTTP client for the separately hosted vision inference service."""
 
     def __init__(self):
-        if not VISION_INFERENCE_ENDPOINT:
+        if not settings.inference_endpoint:
             raise RuntimeError(
                 "VISION_INFERENCE_ENDPOINT must be configured for the backend."
             )
 
-        self.endpoint = f"{VISION_INFERENCE_ENDPOINT.rstrip('/')}/detect"
-        self.api_token = os.environ.get("VISION_API_TOKEN")
-        self.app_environment = os.environ.get(
-            "APP_ENV",
-            "development",
-        ).strip().lower()
+        self.endpoint = f"{settings.inference_endpoint}/detect"
+        self.api_token = settings.api_token
+        self.app_environment = settings.app_env
 
         if self.app_environment == "production" and not self.api_token:
             raise RuntimeError(
@@ -65,7 +62,7 @@ class GroundingDINODetector(BaseDetector):
                 },
                 data=data,
                 headers=headers,
-                timeout=300,
+                timeout=settings.request_timeout_seconds,
             )
 
         response.raise_for_status()
