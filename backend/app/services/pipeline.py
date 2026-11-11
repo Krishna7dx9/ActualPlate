@@ -40,6 +40,42 @@ def _build_scale_map(foods):
         scale_map[label.strip().lower()] = dimensions
     return scale_map
 
+
+
+def _enrich_nutrition(detected_foods, merged):
+    nutrition_results = []
+    nutrition_errors = []
+    for item in detected_foods:
+        query = item.get("search_query")
+        if not isinstance(query, str) or not query.strip():
+            nutrition_errors.append({"code": "food_label_unavailable"})
+            continue
+        density = item.get("density_g_cm3")
+        volume = merged.get(query.strip().lower())
+        if volume is None or not isinstance(volume, (int, float)) or isinstance(volume, bool) or not math.isfinite(volume) or volume <= 0:
+            nutrition_errors.append({"food": query, "code": "volume_unavailable"})
+            continue
+        if not isinstance(density, (int, float)) or isinstance(density, bool) or not math.isfinite(density) or density <= 0:
+            nutrition_errors.append({"food": query, "code": "density_unavailable"})
+            continue
+        try:
+            provider_result = search_food(query)
+            if not isinstance(provider_result, dict) or "error" in provider_result:
+                nutrition_errors.append({"food": query, "code": "provider_unavailable"})
+                continue
+            nutrition_results.append(format_nutrition_response(provider_result, volume * density))
+        except Exception:
+            logger.exception("Nutrition enrichment failed")
+            nutrition_errors.append({"food": query, "code": "provider_unavailable"})
+
+    if len(nutrition_results) == len(detected_foods) and detected_foods:
+        nutrition_status = "complete"
+    elif nutrition_results:
+        nutrition_status = "partial"
+    else:
+        nutrition_status = "unavailable"
+    return nutrition_results, nutrition_errors, nutrition_status
+
 async def process_image(file: UploadFile):
     image = await file.read()
     image_path = None
@@ -76,31 +112,16 @@ async def process_image(file: UploadFile):
             if label and vol: 
                 merged[label] = merged.get(label, 0) + vol
 
-        nutrition_results = []
-        for item in detected_foods:
-            q = item["search_query"]
-            d = item.get("density_g_cm3")
-            match = merged.get(q.strip().lower())
-            if (
-                match is not None
-                and isinstance(d, (int, float))
-                and not isinstance(d, bool)
-                and math.isfinite(d)
-                and d > 0
-            ):
-                mass = match * d
-                try:
-                    data = search_food(q)
-                    if "error" not in data:
-                        nutrition_results.append(format_nutrition_response(data, mass))
-                except Exception: pass # Will fix in another branch
+        nutrition_results, nutrition_errors, nutrition_status = _enrich_nutrition(detected_foods, merged)
 
         return {
             "foods": nutrition_results, 
             "geometry": foods_data,
             "vlm_output": detected_foods,
             "total_detected": len(foods_data), 
-            "total_nutrition": aggregate_nutrition(nutrition_results)
+            "total_nutrition": aggregate_nutrition(nutrition_results),
+            "nutrition_status": nutrition_status,
+            "nutrition_errors": nutrition_errors,
         }
     finally:
         if image_path and os.path.exists(image_path): os.remove(image_path)
@@ -199,24 +220,7 @@ async def process_image_stream(file):
                 merged[label] = merged.get(label, 0) + vol
 
         yield f"data: {json.dumps({'step': 'nutrition', 'status': 'running', 'message': 'Fetching FatSecret...'})}\n\n"
-        nutrition_results = []
-        for item in detected_foods:
-            q = item["search_query"]
-            d = item.get("density_g_cm3")
-            match = merged.get(q.strip().lower())
-            if (
-                match is not None
-                and isinstance(d, (int, float))
-                and not isinstance(d, bool)
-                and math.isfinite(d)
-                and d > 0
-            ):
-                mass = match * d
-                try:
-                    data = search_food(q)
-                    if "error" not in data:
-                        nutrition_results.append(format_nutrition_response(data, mass))
-                except Exception: pass # Will fix in another branch
+        nutrition_results, nutrition_errors, nutrition_status = _enrich_nutrition(detected_foods, merged)
 
         # FIX: Remove heavy base64 masks from final payload to prevent browser OOM crash
         clean_geometry = []
@@ -230,7 +234,9 @@ async def process_image_stream(file):
             "geometry": clean_geometry, 
             "vlm_output": detected_foods, 
             "total_detected": len(foods_data), 
-            "total_nutrition": aggregate_nutrition(nutrition_results)
+            "total_nutrition": aggregate_nutrition(nutrition_results),
+            "nutrition_status": nutrition_status,
+            "nutrition_errors": nutrition_errors,
         }
         yield f"data: {json.dumps({'step': 'nutrition', 'status': 'done', 'message': 'Complete', 'final': final_payload})}\n\n"
     finally:
