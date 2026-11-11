@@ -146,8 +146,6 @@ def get_food_details(food_id: str) -> dict[str, Any]:
         return _api_get({"method": "food.get", "food_id": food_id.strip()})
     except FatSecretConfigurationError:
         return {"error": "FatSecret integration is not configured."}
-    except FatSecretConfigurationError:
-        return {"error": "FatSecret integration is not configured."}
     except (requests.RequestException, RuntimeError):
         return {"error": "FatSecret is temporarily unavailable."}
 
