@@ -31,7 +31,10 @@ def utc_now() -> datetime:
 
 class User(Base):
     __tablename__ = "users"
-    __table_args__ = (\n        UniqueConstraint("email", name="uq_users_email"),\n        Index("ix_users_email_active", "email", "is_active"),\n    )
+    __table_args__ = (
+        UniqueConstraint("email", name="uq_users_email"),
+        Index("ix_users_email_active", "email", "is_active"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     email: Mapped[str] = mapped_column(String(320), nullable=False)
@@ -46,6 +49,7 @@ class User(Base):
 
 class Plan(Base):
     __tablename__ = "plans"
+    __table_args__ = (UniqueConstraint("code", name="uq_plans_code"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     code: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -57,7 +61,10 @@ class Plan(Base):
 
 class Organization(Base):
     __tablename__ = "organizations"
-    __table_args__ = (\n        UniqueConstraint("slug", name="uq_organizations_slug"),\n        Index("ix_organizations_active_plan", "is_active", "plan_id"),\n    )
+    __table_args__ = (
+        UniqueConstraint("slug", name="uq_organizations_slug"),
+        Index("ix_organizations_active_plan", "is_active", "plan_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
