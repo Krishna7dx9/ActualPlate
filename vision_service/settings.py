@@ -7,6 +7,10 @@ import os
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 def _positive_int(name: str, default: str) -> int:
     raw = os.environ.get(name, default).strip()
