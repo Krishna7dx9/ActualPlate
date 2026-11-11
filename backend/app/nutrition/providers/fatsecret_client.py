@@ -73,8 +73,8 @@ def get_access_token() -> str:
     """Return a cached OAuth2 application token, refreshing before expiry."""
     global _access_token, _token_expiry
 
-    now = time.monotonic()
     with _token_lock:
+        now = time.monotonic()
         if _access_token and now < _token_expiry:
             return _access_token
 
@@ -95,6 +95,8 @@ def get_access_token() -> str:
 
         token = payload.get("access_token")
         try:
+            if isinstance(payload.get("expires_in"), bool):
+                raise ValueError("boolean expiry is invalid")
             expires_in = float(payload.get("expires_in"))
         except (TypeError, ValueError) as exc:
             raise RuntimeError("FatSecret returned an invalid token expiry.") from exc
@@ -109,9 +111,11 @@ def get_access_token() -> str:
         return token
 
 
-def _invalidate_access_token() -> None:
+def _invalidate_access_token(expected_token: str | None = None) -> None:
     global _access_token, _token_expiry
     with _token_lock:
+        if expected_token is not None and _access_token != expected_token:
+            return
         _access_token = None
         _token_expiry = 0.0
 
@@ -127,7 +131,7 @@ def _api_get(params: dict[str, str]) -> dict[str, Any]:
             timeout=_timeout_seconds(),
         )
         if response.status_code == 401 and attempt == 0:
-            _invalidate_access_token()
+            _invalidate_access_token(token)
             continue
         payload = _response_json(response)
         if payload is None:
@@ -151,6 +155,8 @@ def get_food_details(food_id: str) -> dict[str, Any]:
 
 
 def _finite_nonnegative(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
     try:
         number = float(value)
     except (TypeError, ValueError):
@@ -169,7 +175,7 @@ def normalize_food_response(food_data: dict[str, Any]) -> dict[str, Any]:
     food_name, food_id = food.get("food_name"), food.get("food_id")
     if not isinstance(food_name, str) or not food_name.strip():
         return {"error": "FatSecret food record is missing its name."}
-    if food_id is None or not str(food_id).strip():
+    if isinstance(food_id, bool) or food_id is None or not str(food_id).strip():
         return {"error": "FatSecret food record is missing its identifier."}
 
     servings_data = food.get("servings")
