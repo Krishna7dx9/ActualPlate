@@ -1,6 +1,7 @@
 import os
 import tempfile
 import json
+import math
 import cv2
 import base64
 import numpy as np
@@ -51,9 +52,15 @@ async def process_image(file: UploadFile):
         nutrition_results = []
         for item in detected_foods:
             q = item["search_query"]
-            d = item["density_g_cm3"]
+            d = item.get("density_g_cm3")
             match = merged.get(q.strip().lower())
-            if match:
+            if (
+                match is not None
+                and isinstance(d, (int, float))
+                and not isinstance(d, bool)
+                and math.isfinite(d)
+                and d > 0
+            ):
                 mass = match * d
                 try:
                     data = search_food(q)
@@ -154,9 +161,15 @@ async def process_image_stream(file):
         nutrition_results = []
         for item in detected_foods:
             q = item["search_query"]
-            d = item["density_g_cm3"]
+            d = item.get("density_g_cm3")
             match = merged.get(q.strip().lower())
-            if match:
+            if (
+                match is not None
+                and isinstance(d, (int, float))
+                and not isinstance(d, bool)
+                and math.isfinite(d)
+                and d > 0
+            ):
                 mass = match * d
                 try:
                     data = search_food(q)
