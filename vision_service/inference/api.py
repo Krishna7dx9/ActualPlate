@@ -9,10 +9,8 @@ Two endpoints:
 The app holds no model state of its own. Model loading is owned by
 models.py and is triggered lazily by the first /detect request.
 
-Auth: if VISION_API_TOKEN is set in the environment, /detect requires
-the header X-API-Token to match. If unset, the endpoint is open.
-This is intended for local/Colab development; set the token in
-production.
+Auth: VISION_API_TOKEN is required at startup. /detect and /warmup require
+the X-API-Token header. The lightweight /health endpoint is public for probes.
 
 Response format:
 
