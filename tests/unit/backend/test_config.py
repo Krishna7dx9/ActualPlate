@@ -114,3 +114,15 @@ def test_rate_limit_setting_is_validated(monkeypatch):
 
     with pytest.raises(ValueError, match="RATE_LIMIT_REQUESTS_PER_MINUTE"):
         Settings.from_environment()
+
+
+def test_vision_warmup_timeout_is_bounded(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("MAX_UPLOAD_BYTES", "10485760")
+    monkeypatch.setenv("MAX_REQUEST_BODY_BYTES", "12582912")
+    monkeypatch.setenv("MAX_IMAGE_PIXELS", "40000000")
+    monkeypatch.setenv("VISION_INFERENCE_ENDPOINT", "http://localhost:8001")
+    monkeypatch.setenv("VISION_WARMUP_TIMEOUT_SECONDS", "10")
+
+    with pytest.raises(ValueError, match="VISION_WARMUP_TIMEOUT_SECONDS"):
+        Settings.from_environment()
