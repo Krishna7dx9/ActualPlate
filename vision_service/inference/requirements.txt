@@ -3,7 +3,7 @@
 # Model-loading compatibility must be verified before upgrading transformers,
 # SAM2, or the pinned MoGe revision.
 
-numpy==2.5.3
+numpy==2.4.6
 scipy==1.18.1
 torch==2.14.1
 
