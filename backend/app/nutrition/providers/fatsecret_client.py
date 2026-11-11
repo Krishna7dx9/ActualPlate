@@ -26,11 +26,15 @@ _token_expiry = 0.0
 _token_lock = threading.RLock()
 
 
+class FatSecretConfigurationError(RuntimeError):
+    """Raised when required provider configuration is absent or invalid."""
+
+
 def _credentials() -> tuple[str, str]:
     client_id = os.getenv("FATSECRET_CLIENT_ID", "").strip()
     client_secret = os.getenv("FATSECRET_CLIENT_SECRET", "").strip()
     if not client_id or not client_secret:
-        raise RuntimeError("FatSecret credentials are not configured.")
+        raise FatSecretConfigurationError("FatSecret credentials are not configured.")
     return client_id, client_secret
 
 
@@ -39,9 +43,9 @@ def _timeout_seconds() -> float:
     try:
         timeout = float(raw)
     except (TypeError, ValueError) as exc:
-        raise RuntimeError("FATSECRET_TIMEOUT_SECONDS must be a number.") from exc
+        raise FatSecretConfigurationError("FATSECRET_TIMEOUT_SECONDS must be a number.") from exc
     if not math.isfinite(timeout) or not 1 <= timeout <= 60:
-        raise RuntimeError("FATSECRET_TIMEOUT_SECONDS must be between 1 and 60.")
+        raise FatSecretConfigurationError("FATSECRET_TIMEOUT_SECONDS must be between 1 and 60.")
     return timeout
 
 
@@ -140,6 +144,10 @@ def get_food_details(food_id: str) -> dict[str, Any]:
         return {"error": "Food identifier is invalid."}
     try:
         return _api_get({"method": "food.get", "food_id": food_id.strip()})
+    except FatSecretConfigurationError:
+        return {"error": "FatSecret integration is not configured."}
+    except FatSecretConfigurationError:
+        return {"error": "FatSecret integration is not configured."}
     except (requests.RequestException, RuntimeError):
         return {"error": "FatSecret is temporarily unavailable."}
 
