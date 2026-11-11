@@ -43,14 +43,22 @@ import shutil
 import tempfile
 import uuid
 import json
+import logging
 
 import cv2
 import numpy as np
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
+from fastapi.concurrency import run_in_threadpool
 
 from vision_service.inference.inference import detect_and_measure
-from vision_service.inference.models import models_loaded
+from vision_service.inference.models import (
+    DEVICE,
+    get_grounding_dino,
+    get_moge,
+    get_sam2_predictor,
+    models_loaded,
+)
 from vision_service.inference.volume import estimate_volume_cm3
 
 
@@ -60,6 +68,7 @@ if not VISION_API_TOKEN:
 
 # Maximum side length for arrays returned when include_arrays=true.
 MAX_ARRAY_SIDE = 512
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="ActualPlate Vision API",
@@ -108,6 +117,31 @@ async def health() -> dict:
         "status": "ok",
         "service": "ActualPlate Vision API",
         "models_loaded": models_loaded(),
+    }
+
+
+
+def _load_all_models() -> None:
+    get_grounding_dino()
+    get_sam2_predictor()
+    get_moge()
+
+
+@app.post("/warmup")
+async def warmup(x_api_token: str | None = Header(default=None)) -> dict:
+    """Explicitly load every GPU model; requires the service token."""
+    _check_auth(x_api_token)
+    try:
+        await run_in_threadpool(_load_all_models)
+    except Exception as exc:
+        logger.exception("Vision model warmup failed")
+        raise HTTPException(status_code=503, detail="Vision model warmup failed.") from exc
+    if not models_loaded():
+        raise HTTPException(status_code=503, detail="Vision models are not ready.")
+    return {
+        "status": "ready",
+        "models_loaded": True,
+        "device": DEVICE.type,
     }
 
 
