@@ -304,3 +304,60 @@ def test_versioned_scan_records_usage_for_a_successful_stream(client, monkeypatc
     )
     assert usage.status_code == 200
     assert usage.json()["used"] == 1
+
+
+def test_health_and_readiness_report_dependency_state(client, monkeypatch):
+    async def ready_worker():
+        return {"status": "ready", "models_loaded": True}
+
+    async def local_limiter():
+        return {"status": "local", "mode": "in_memory"}
+
+    monkeypatch.setattr("backend.app.api.routes.system._worker_health", ready_worker)
+    monkeypatch.setattr("backend.app.api.routes.system.rate_limiter.health", local_limiter)
+
+    health = client.get("/v1/system/health")
+    ready = client.get("/v1/system/ready")
+    assert health.status_code == 200
+    assert health.json()["components"]["database"]["status"] == "ok"
+    assert health.json()["components"]["vision_worker"]["models_loaded"] is True
+    assert ready.status_code == 200
+    assert ready.json()["status"] == "ready"
+    assert health.headers["X-Content-Type-Options"] == "nosniff"
+    assert health.headers["X-Frame-Options"] == "DENY"
+
+
+def test_readiness_returns_503_when_vision_worker_is_not_ready(client, monkeypatch):
+    async def warming_worker():
+        return {"status": "warming", "models_loaded": False}
+
+    async def local_limiter():
+        return {"status": "local", "mode": "in_memory"}
+
+    monkeypatch.setattr("backend.app.api.routes.system._worker_health", warming_worker)
+    monkeypatch.setattr("backend.app.api.routes.system.rate_limiter.health", local_limiter)
+
+    response = client.get("/v1/system/ready")
+    assert response.status_code == 503
+    assert response.json()["status"] == "not_ready"
+
+
+def test_gpu_warmup_requires_admin_and_explicit_scope(client, monkeypatch):
+    created = _signup(client, "warmup@example.com")
+    async def fake_warmup():
+        return {"status": "ready", "models_loaded": True}
+
+    monkeypatch.setattr("backend.app.api.routes.system._perform_worker_warmup", fake_warmup)
+    key_response = client.post(
+        "/v1/api-keys",
+        headers={"Authorization": f"Bearer {created['access_token']}"},
+        json={"name": "warmup operator", "scopes": ["system:warmup"]},
+    )
+    assert key_response.status_code == 201
+
+    response = client.post(
+        "/v1/system/warmup",
+        headers={"X-API-Key": key_response.json()["key"]},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready", "models_loaded": True}
