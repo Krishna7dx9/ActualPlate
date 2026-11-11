@@ -38,4 +38,5 @@ test('build includes baseline static security headers', () => {
   assert.match(headers, /X-Content-Type-Options: nosniff/);
   assert.match(headers, /X-Frame-Options: DENY/);
   assert.match(headers, /Content-Security-Policy:/);
+  assert.doesNotMatch(headers, /localhost/);
 });
