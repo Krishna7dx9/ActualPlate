@@ -73,3 +73,19 @@ def test_recognition_client_is_lazy_and_requires_provider_credentials(monkeypatc
         else:
             raise AssertionError("Missing credentials should fail when a provider call is requested.")
         mock_openai.assert_not_called()
+
+
+def test_malformed_provider_json_is_not_misreported_as_no_food(monkeypatch):
+    monkeypatch.setenv("FOOD_RECOGNITION_MODEL", "test/provider-model")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _FakeResponse("not-json")
+    with patch(
+        "vision_service.recognition.food_recognition._get_client",
+        return_value=fake_client,
+    ):
+        try:
+            food_recognition.detect_food(_png_bytes())
+        except food_recognition.RecognitionOutputError:
+            pass
+        else:
+            raise AssertionError("Malformed provider output must be surfaced as an error.")
