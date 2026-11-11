@@ -12,19 +12,28 @@ Example Output:
 [{"search_query": "bagel", "density_g_cm3": 0.8, "estimated_diameter_cm": 10.0, "estimated_thickness_cm": 4.0}]
 """
 
-from openai import OpenAI
 import base64
 import json
+import math
 import re
-import os
-from dotenv import load_dotenv
+from functools import lru_cache
+from io import BytesIO
 
-load_dotenv()
+from openai import OpenAI
+from PIL import Image
 
-client = OpenAI(
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-    base_url="https://openrouter.ai/api/v1"
-)
+from vision_service.settings import settings
+
+
+@lru_cache(maxsize=1)
+def _get_client() -> OpenAI:
+    """Create the provider client lazily so missing secrets fail at use time."""
+    if not settings.openrouter_api_key:
+        raise RuntimeError("OPENROUTER_API_KEY must be configured for food recognition.")
+    return OpenAI(
+        api_key=settings.openrouter_api_key,
+        base_url=settings.openrouter_base_url,
+    )
 
 def _strip_json_fences(text: str) -> str:
     cleaned = re.sub(r"^```(?:json)?\s*", "", text.strip())
@@ -55,17 +64,23 @@ def _validate_items(items) -> list:
     return valid
 
 def detect_food(image_bytes: bytes) -> list:
+    with Image.open(BytesIO(image_bytes)) as image:
+        image_format = image.format
+    image_mime = Image.MIME.get(image_format)
+    if image_mime not in {"image/jpeg", "image/png", "image/webp"}:
+        raise ValueError("Food recognition received an unsupported image format.")
+
     image_base64 = base64.b64encode(image_bytes).decode("utf-8")
-    
-    response = client.chat.completions.create(
-        model="google/gemma-3-27b-it",
-        max_tokens=800,
+
+    response = _get_client().chat.completions.create(
+        model=settings.openrouter_model,
+        max_tokens=settings.openrouter_max_tokens,
         messages=[
             {
                 "role": "user",
                 "content": [
                     {"type": "text", "text": SYSTEM_PROMPT},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}},
+                    {"type": "image_url", "image_url": {"url": f"data:{image_mime};base64,{image_base64}"}},
                 ],
             }
         ],
