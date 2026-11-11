@@ -48,8 +48,13 @@ async def process_image(file: UploadFile):
             temp.write(image)
             image_path = temp.name
 
-        detected_foods = detect_food(image)
-        if not detected_foods: return {"error": "Food not detected"}
+        try:
+            detected_foods = detect_food(image)
+        except Exception:
+            logger.exception("Food recognition failed")
+            return {"error": "Food recognition is temporarily unavailable."}
+        if not detected_foods:
+            return {"error": "Food not detected"}
 
         scale_map = _build_scale_map(detected_foods)
         
@@ -104,11 +109,27 @@ async def process_image_stream(file):
             temp.write(image)
             image_path = temp.name
 
-        yield f"data: {json.dumps({'step': 'gemma', 'status': 'running', 'message': 'Gemma is analyzing...'})}\n\n"
-        detected_foods = detect_food(image)
-        yield f"data: {json.dumps({'step': 'gemma', 'status': 'done', 'message': 'Gemma identified foods', 'data': detected_foods})}\n\n"
-        
-        if not detected_foods: return
+        yield f"data: {json.dumps({'step': 'gemma', 'status': 'running', 'message': 'Analyzing food image...'})}\n\n"
+        try:
+            detected_foods = detect_food(image)
+        except Exception:
+            logger.exception("Food recognition failed")
+            yield f"data: {json.dumps({'step': 'error', 'status': 'error', 'message': 'Food recognition is temporarily unavailable.'})}\n\n"
+            return
+        yield f"data: {json.dumps({'step': 'gemma', 'status': 'done', 'message': 'Food recognition complete', 'data': detected_foods})}\n\n"
+
+        if not detected_foods:
+            empty_result = {
+                "foods": [],
+                "geometry": [],
+                "vlm_output": [],
+                "total_detected": 0,
+                "total_nutrition": None,
+                "nutrition_status": "not_available",
+                "nutrition_errors": [],
+            }
+            yield f"data: {json.dumps({'step': 'complete', 'status': 'done', 'message': 'No food detected', 'final': empty_result})}\n\n"
+            return
 
         yield f"data: {json.dumps({'step': 'dino', 'status': 'running', 'message': 'Running DINO, SAM2, and 3D Math...'})}\n\n"
         
