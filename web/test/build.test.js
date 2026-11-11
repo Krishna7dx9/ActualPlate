@@ -7,7 +7,7 @@ const outputPath = path.join(process.cwd(), 'dist', 'index.html');
 const html = fs.readFileSync(outputPath, 'utf8');
 
 test('build injects a configured API base URL and removes template placeholders', () => {
-  assert.match(html, /const API_BASE_URL = "https:\/\/api\.actualplate\.tech";/);
+  assert.match(html, /const API_BASE_URL = "https:\/\/api\\.example\\.test";/);
   assert.doesNotMatch(html, /\{\{API_[A-Z_]+\}\}/);
   assert.match(html, /\/upload-image-stream/);
 });
