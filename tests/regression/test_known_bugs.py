@@ -1,9 +1,17 @@
 from fastapi.testclient import TestClient
+from io import BytesIO
+from PIL import Image
 from unittest.mock import patch, MagicMock
 import json
 from backend.app.main import app
 
 client = TestClient(app)
+
+
+def _valid_jpeg_bytes():
+    image_buffer = BytesIO()
+    Image.new("RGB", (8, 8)).save(image_buffer, format="JPEG")
+    return image_buffer.getvalue()
 
 @patch("requests.post")
 @patch("backend.app.services.pipeline.detect_food")
@@ -30,7 +38,7 @@ def test_regression_multi_food_scale_mapping(mock_detect_food, mock_requests_pos
 
     response = client.post(
         "/upload-image",
-        files={"file": ("food.jpg", b"fake", "image/jpeg")}
+        files={"file": ("food.jpg", _valid_jpeg_bytes(), "image/jpeg")}
     )
     
     assert response.status_code == 200

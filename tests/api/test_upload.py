@@ -1,8 +1,16 @@
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+from io import BytesIO
+from PIL import Image
+from unittest.mock import patch, MagicMock, AsyncMock
 from backend.app.main import app
 
 client = TestClient(app)
+
+
+def _valid_png_bytes():
+    image_buffer = BytesIO()
+    Image.new("RGB", (8, 8)).save(image_buffer, format="PNG")
+    return image_buffer.getvalue()
 
 @patch("requests.post")
 @patch("backend.app.services.pipeline.detect_food")
@@ -21,7 +29,7 @@ def test_single_food(mock_detect_food, mock_requests_post):
 
     response = client.post(
         "/upload-image",
-        files={"file": ("pizza.jpg", b"fake", "image/jpeg")}
+        files={"file": ("pizza.png", _valid_png_bytes(), "image/png")}
     )
     assert response.status_code == 200
 
@@ -33,3 +41,22 @@ def test_invalid_file():
     )
     assert response.status_code == 400
     assert response.json() == {"error": "Only image files allowed"}
+
+
+def test_unhandled_exception_does_not_expose_internal_details():
+    """Public API errors must not disclose exception messages."""
+    safe_client = TestClient(app, raise_server_exceptions=False)
+
+    with patch(
+        "backend.app.api.routes.upload.process_image",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("upstream credential leaked"),
+    ):
+        response = safe_client.post(
+            "/upload-image",
+            files={"file": ("image.png", _valid_png_bytes(), "image/png")},
+        )
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Internal Server Error"}
+    assert "credential" not in response.text
