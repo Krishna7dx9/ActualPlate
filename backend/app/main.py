@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.api.routes.nutrition import router as nutrition_router
 from backend.app.api.routes.upload import router as upload_router
+from backend.app.auth.routes import router as auth_router
+from backend.app.auth.api_keys import router as api_keys_router
 from backend.app.config import settings
 from backend.app.middleware.request_size_limit import RequestSizeLimitMiddleware
 
@@ -24,11 +26,13 @@ app.add_middleware(
     allow_origins=list(settings.cors_allowed_origins),
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-API-Token"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Token", "X-API-Key"],
 )
 
 app.include_router(nutrition_router)
 app.include_router(upload_router)
+app.include_router(auth_router)
+app.include_router(api_keys_router)
 
 
 @app.exception_handler(Exception)
