@@ -1,7 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const configuredApiBase = process.env.VITE_API_URL || 'https://api.actualplate.tech';
+const configuredApiBase = process.env.VITE_API_URL;
+if (!configuredApiBase) {
+  throw new Error('VITE_API_URL must be explicitly configured for this build.');
+}
 let parsedApiBase;
 
 try {
