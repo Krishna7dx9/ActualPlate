@@ -43,6 +43,7 @@ import shutil
 import tempfile
 import uuid
 import json
+import secrets
 
 import cv2
 import numpy as np
@@ -54,9 +55,23 @@ from vision_service.inference.models import models_loaded
 from vision_service.inference.volume import estimate_volume_cm3
 
 
+APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
 VISION_API_TOKEN = os.environ.get("VISION_API_TOKEN")
-if not VISION_API_TOKEN:
-    raise ValueError("VISION_API_TOKEN environment variable must be set.")
+VISION_API_TOKEN = VISION_API_TOKEN.strip() if VISION_API_TOKEN else None
+
+
+def _validate_auth_configuration(
+    app_environment: str,
+    api_token: str | None,
+) -> None:
+    """Require service-to-service authentication in production deployments."""
+    if app_environment == "production" and not api_token:
+        raise RuntimeError(
+            "VISION_API_TOKEN must be configured when APP_ENV=production."
+        )
+
+
+_validate_auth_configuration(APP_ENV, VISION_API_TOKEN)
 
 # Maximum side length for arrays returned when include_arrays=true.
 MAX_ARRAY_SIDE = 512
@@ -68,9 +83,11 @@ app = FastAPI(
 
 
 def _check_auth(x_api_token: str | None) -> None:
+    # Tokenless access is supported only outside production. Production
+    # configuration is rejected during application initialization.
     if VISION_API_TOKEN is None:
         return
-    if x_api_token != VISION_API_TOKEN:
+    if not secrets.compare_digest(x_api_token or "", VISION_API_TOKEN):
         raise HTTPException(status_code=401, detail="Invalid API token.")
 
 
