@@ -204,9 +204,6 @@ async def detect(
                     if len(possible_matches) == 1:
                         food_scale = parsed_scale_map[possible_matches[0]]
                         
-            estimated_thickness_cm = food_scale.get("thickness")
-            estimated_diameter_cm = food_scale.get("diameter")
-
             food_record = {
                 "label": food.label,
                 "score": food.score,
