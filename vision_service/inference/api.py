@@ -38,6 +38,7 @@ from __future__ import annotations
 import base64
 import io
 import os
+from pathlib import Path
 import shutil
 import tempfile
 import uuid
@@ -73,6 +74,40 @@ _validate_auth_configuration(APP_ENV, VISION_API_TOKEN)
 
 # Maximum side length for arrays returned when include_arrays=true.
 MAX_ARRAY_SIDE = settings.max_array_side
+
+
+def _load_label_aliases() -> dict[str, str]:
+    configured_path = os.environ.get("VISION_LABEL_ALIASES_FILE")
+    alias_path = (
+        Path(configured_path).expanduser()
+        if configured_path
+        else Path(__file__).resolve().parents[1]
+        / "recognition"
+        / "label_aliases.json"
+    )
+    try:
+        with alias_path.open("r", encoding="utf-8") as alias_file:
+            raw_aliases = json.load(alias_file)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError("Unable to load vision label alias configuration.") from exc
+
+    if not isinstance(raw_aliases, dict):
+        raise ValueError("Vision label aliases must be a JSON object.")
+
+    aliases: dict[str, str] = {}
+    for key, value in raw_aliases.items():
+        if (
+            not isinstance(key, str)
+            or not key.strip()
+            or not isinstance(value, str)
+            or not value.strip()
+        ):
+            raise ValueError("Vision label aliases must map non-empty strings.")
+        aliases[key.strip().lower()] = value.strip().lower()
+    return aliases
+
+
+LABEL_ALIASES = _load_label_aliases()
 
 app = FastAPI(
     title="ActualPlate Vision API",
@@ -188,12 +223,10 @@ async def detect(
                 food_scale = parsed_scale_map[food_label_lower]
             else:
                 # 2. Controlled Alias Match (Handles known DINO truncations safely)
-                aliases = {
-                    "corn": "corn on the cob",
-                    "nuggets": "chicken nugget",
-                    "fries": "french fries"
-                }
-                alias_target = aliases.get(food_label_lower, food_label_lower)
+                alias_target = LABEL_ALIASES.get(
+                    food_label_lower,
+                    food_label_lower,
+                )
                 
                 if alias_target in parsed_scale_map:
                     food_scale = parsed_scale_map[alias_target]
