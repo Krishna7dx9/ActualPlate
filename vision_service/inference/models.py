@@ -4,7 +4,7 @@ Model loading for the ActualPlate inference service.
 Owns the lifetime of every GPU model the service uses:
 - Grounding DINO (open-vocabulary object detection)
 - SAM2 (image segmentation)
-- MoGe-2 (metric monocular depth - MIT License)
+- MoGe-2 (monocular geometry/depth; no absolute metric-scale guarantee)
 
 Models are loaded lazily on first access and cached for the process
 lifetime. Loading is expensive (~1–3 minutes on a cold GPU host), so
@@ -62,7 +62,9 @@ def get_sam2_predictor() -> Any:
 def get_moge() -> Any:
     """
     Load (once) and return the MoGe-2 model.
-    MoGe-2 predicts affine-invariant 3D point maps and metric depth.
+
+    Its monocular geometry/depth output must not be assumed to establish
+    absolute scene scale for an individual image.
     """
     global _moge_model
     if _moge_model is None:
