@@ -5,3 +5,5 @@ import os
 os.environ["VISION_API_TOKEN"] = "test-token"
 os.environ["FATSECRET_CLIENT_ID"] = "test-id"
 os.environ["FATSECRET_CLIENT_SECRET"] = "test-secret"
+os.environ["MAX_UPLOAD_BYTES"] = "10485760"
+os.environ["MAX_IMAGE_PIXELS"] = "40000000"
