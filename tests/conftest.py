@@ -1,6 +1,7 @@
 import os
 
-# Set dummy environment variables for testing BEFORE any imports happen.
+# Set deterministic test environment and dummy variables BEFORE imports happen.
+os.environ["APP_ENV"] = "test"
 # This prevents the app from crashing when it looks for tokens during test collection.
 os.environ["VISION_API_TOKEN"] = "test-token"
 os.environ["FATSECRET_CLIENT_ID"] = "test-id"
