@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-ALLOWED_API_SCOPES = frozenset({"scans:write", "usage:read", "keys:manage"})
+ALLOWED_API_SCOPES = frozenset({"scans:write", "usage:read", "keys:manage", "system:warmup"})
 
 
 class SignupRequest(BaseModel):
