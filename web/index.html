@@ -130,7 +130,7 @@ async function consumeSSE(response,signal){
    const {done,value}=await reader.read();if(done)break;
    buffer+=decoder.decode(value,{stream:true});
    const events=buffer.split(/\r?\n\r?\n/);buffer=events.pop();
-   for(const event of events){const line=event.split(/\r?\n/).find(x=>x.startsWith("data:"));if(!line)continue;const parsed=JSON.parse(line.slice(5).trim());setStep(parsed);if(parsed.final)sawFinal=true;}
+   for(const event of events){const line=event.split(/\r?\n/).find(x=>x.startsWith("data:"));if(!line)continue;const parsed=JSON.parse(line.slice(5).trim());if(parsed.step==="complete"&&!parsed.final){parsed.final={foods:[],total_nutrition:null,nutrition_status:parsed.nutrition_status||"not_available"};sawFinal=true;}setStep(parsed);if(parsed.final)sawFinal=true;}
   }
   buffer+=decoder.decode();
   if(buffer.trim()){const line=buffer.split(/\r?\n/).find(x=>x.startsWith("data:"));if(line){const parsed=JSON.parse(line.slice(5).trim());if(parsed.step==="complete"&&!parsed.final){parsed.final={foods:[],total_nutrition:null,nutrition_status:parsed.nutrition_status||"not_available"};sawFinal=true;}setStep(parsed);if(parsed.final)sawFinal=true;}}
