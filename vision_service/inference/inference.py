@@ -245,10 +245,10 @@ def detect_and_measure(
     
     # Extract focal length from predicted intrinsics
     intrinsics = prediction.get("intrinsics")
-    if intrinsics is not None:
-        focal_length_px = float(intrinsics[0, 0, 0].item())
-    elif focal_px_override is not None:
+    if focal_px_override is not None:
         focal_length_px = float(focal_px_override)
+    elif intrinsics is not None:
+        focal_length_px = float(intrinsics[0, 0, 0].item())
     else:
         raise ValueError(
             "Camera focal length is unavailable; provide calibrated focal_px."
