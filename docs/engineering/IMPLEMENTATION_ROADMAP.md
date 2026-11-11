@@ -18,8 +18,8 @@ This roadmap is the execution record for the engineering improvement program. It
 | ENG-001 | Repository baseline audit | P0 | Current structure, verified findings, constraints, and remediation order documented | PR #53 open |
 | ENG-002 | Docker dependency manifest integrity | P0 | Dockerfile references tracked dependency manifests; Docker image build verified in CI | PR #61 open; Docker image build CI passed (2026-11-12) |
 | ENG-003 | CI dependency reproducibility | P0 | CI installs from tracked manifests and validates dependency consistency without fake production credentials | PR #61 open; Python CI and Docker build passed |
-| ENG-004 | Backend configuration contract | P0 | Typed settings; required/optional variables explicit; invalid configuration fails clearly | PR #56 open; Python CI rerun after dependency pin in progress |
-| ENG-005 | Vision authentication contract | P0 | Token policy consistent between docs, startup, and request handling; no import-time surprise | PR #55 open; Python CI rerun after dependency pin in progress; extended by PR #60 |
+| ENG-004 | Backend configuration contract | P0 | Typed settings; required/optional variables explicit; invalid configuration fails clearly | PR #56 open; Python CI passed after dependency pin (2026-11-12) |
+| ENG-005 | Vision authentication contract | P0 | Token policy consistent between docs, startup, and request handling; no import-time surprise | PR #55 open; Python CI passed after dependency pin (2026-11-12); extended by PR #60 |
 | ENG-006 | API error contract and logging | P1 | Stable public errors; details logged safely; no raw exception leakage | PR #56 open; Python CI passing |
 | ENG-007 | CORS policy | P1 | Explicit environment configuration; restrictive default; no wildcard policy in production | PR #56 open; Python CI passing |
 | ENG-008 | Upload request limits and decoding | P0 | Bounded request/file handling; actual image decoding; supported-format policy and resource-limit tests | PR #56 open; Python CI passing |
