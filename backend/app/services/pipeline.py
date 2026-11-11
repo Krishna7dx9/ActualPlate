@@ -58,11 +58,15 @@ async def process_image(file: UploadFile):
 
         scale_map = _build_scale_map(detected_foods)
         
-        detections = detector.detect(
-            image_path=image_path, 
-            labels=[item["search_query"] for item in detected_foods],
-            scale_map=scale_map
-        )
+        try:
+            detections = detector.detect(
+                image_path=image_path,
+                labels=[item["search_query"] for item in detected_foods],
+                scale_map=scale_map,
+            )
+        except Exception:
+            logger.exception("Vision worker inference failed")
+            return {"error": "Vision inference is temporarily unavailable."}
         foods_data = detections.get("foods", [])
 
         merged = {}
@@ -135,11 +139,16 @@ async def process_image_stream(file):
         
         scale_map = _build_scale_map(detected_foods)
         
-        detections = detector.detect(
-            image_path=image_path, 
-            labels=[item["search_query"] for item in detected_foods],
-            scale_map=scale_map
-        )
+        try:
+            detections = detector.detect(
+                image_path=image_path,
+                labels=[item["search_query"] for item in detected_foods],
+                scale_map=scale_map,
+            )
+        except Exception:
+            logger.exception("Vision worker inference failed")
+            yield f"data: {json.dumps({'step': 'error', 'status': 'error', 'message': 'Vision inference is temporarily unavailable.'})}\n\n"
+            return
         foods_data = detections.get("foods", [])
         
         img_array = cv2.imread(image_path)
