@@ -15,7 +15,7 @@ test('build injects a configured API base URL and removes template placeholders'
 test('landing page explains B2B platform status without promising unshipped features', () => {
   assert.match(html, /B2B readiness in progress/);
   assert.match(html, /not yet a finished SaaS/i);
-  assert.match(html, /not claim a validated ≤5%/);
+  assert.match(html, /does not currently claim a validated ≤5%/);
   assert.match(html, /Organization-scoped API keys/);
 });
 
