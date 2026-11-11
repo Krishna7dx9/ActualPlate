@@ -107,14 +107,16 @@ function renderResult(payload){
  $("rawResult").textContent=JSON.stringify(payload,null,2);
  const foods=Array.isArray(payload.foods)?payload.foods:[];
  $("foodCount").textContent=String(foods.length);
- const total=payload.total_nutrition&&typeof payload.total_nutrition==="object"?payload.total_nutrition:null;
+ const nutritionStatus=payload.nutrition_status;
+ const hasUsableNutrition=foods.length>0&&["complete","partial"].includes(nutritionStatus);
+ const total=hasUsableNutrition&&payload.total_nutrition&&typeof payload.total_nutrition==="object"?payload.total_nutrition:null;
  const mass=foods.reduce((sum,f)=>sum+(typeof f.mass_g==="number"&&Number.isFinite(f.mass_g)?f.mass_g:0),0);
  showValue("massValue",foods.some(f=>typeof f.mass_g==="number"&&Number.isFinite(f.mass_g))?mass:null," g");
  showValue("calorieValue",total&&total.calories);
  showValue("proteinValue",total&&total.protein," g");
  showValue("carbValue",total&&total.carbohydrate," g");
  showValue("fatValue",total&&total.fat," g");
- $("resultTitle").textContent=foods.length?"Analysis complete":"Analysis complete — nutrition unavailable";
+ $("resultTitle").textContent=!foods.length?"No food detected — nutrition unavailable":nutritionStatus==="partial"?"Analysis complete — partial nutrition data":nutritionStatus==="complete"?"Analysis complete":"Analysis complete — nutrition unavailable";
  $("demoResult").classList.add("show");
  if(!foods.length)setMessage("The pipeline returned no nutrition records. No values have been invented.");
  else setMessage("Analysis finished. Treat all estimates as provisional.");
@@ -131,7 +133,7 @@ async function consumeSSE(response,signal){
    for(const event of events){const line=event.split(/\r?\n/).find(x=>x.startsWith("data:"));if(!line)continue;const parsed=JSON.parse(line.slice(5).trim());setStep(parsed);if(parsed.final)sawFinal=true;}
   }
   buffer+=decoder.decode();
-  if(buffer.trim()){const line=buffer.split(/\r?\n/).find(x=>x.startsWith("data:"));if(line){const parsed=JSON.parse(line.slice(5).trim());setStep(parsed);if(parsed.final)sawFinal=true;}}
+  if(buffer.trim()){const line=buffer.split(/\r?\n/).find(x=>x.startsWith("data:"));if(line){const parsed=JSON.parse(line.slice(5).trim());if(parsed.step==="complete"&&!parsed.final){parsed.final={foods:[],total_nutrition:null,nutrition_status:parsed.nutrition_status||"not_available"};sawFinal=true;}setStep(parsed);if(parsed.final)sawFinal=true;}}
  }finally{reader.releaseLock();}
  if(!sawFinal)throw new Error("The stream ended before a final result was received.");
 }
