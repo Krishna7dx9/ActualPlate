@@ -13,6 +13,8 @@ from backend.app.config import settings
 from backend.app.middleware.request_size_limit import RequestSizeLimitMiddleware
 from backend.app.middleware.rate_limit import RateLimitMiddleware, close_rate_limiter
 from backend.app.api.routes.usage import router as usage_router
+from backend.app.api.routes.system import router as system_router
+from backend.app.middleware.security_headers import SecurityHeadersMiddleware
 
 
 logger = logging.getLogger(__name__)
@@ -23,7 +25,12 @@ async def lifespan(app: FastAPI):
     await close_rate_limiter()
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    lifespan=lifespan,
+    docs_url=None if settings.environment == "production" else "/docs",
+    redoc_url=None if settings.environment == "production" else "/redoc",
+    openapi_url=None if settings.environment == "production" else "/openapi.json",
+)
 
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
@@ -31,6 +38,7 @@ app.add_middleware(
     max_bytes=settings.max_request_body_bytes,
 )
 
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_allowed_origins),
@@ -44,6 +52,7 @@ app.include_router(upload_router)
 app.include_router(auth_router)
 app.include_router(api_keys_router)
 app.include_router(usage_router)
+app.include_router(system_router)
 
 
 @app.exception_handler(Exception)
