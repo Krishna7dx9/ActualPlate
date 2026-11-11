@@ -1,12 +1,15 @@
-import pytest
-import json
+import base64
 import io
-from fastapi.testclient import TestClient
-from unittest.mock import patch
-import numpy as np
+import json
 import os
+from unittest.mock import patch
 
-# We must set the token before importing the app
+import cv2
+import numpy as np
+import pytest
+from fastapi.testclient import TestClient
+
+# Set the token before importing the app.
 os.environ["VISION_API_TOKEN"] = "test-token"
 
 from vision_service.inference.api import app
@@ -14,72 +17,67 @@ from vision_service.inference.inference import InferenceResult, FoodDetection
 
 client = TestClient(app)
 
+
 @pytest.fixture
 def mock_inference_result():
     """Mocks the output of the heavy GPU pipeline."""
+    mask = np.ones((500, 500), dtype=np.uint8)
+    success, encoded_mask = cv2.imencode(".png", mask)
+    assert success
+    mask_png_b64 = base64.b64encode(encoded_mask).decode("ascii")
+
     food1 = FoodDetection(
         label="burger",
         score=0.95,
-        mask_pixels=250000, # 500x500 area
+        mask_pixels=250000,
         depth_stats={"min": 1.0, "max": 1.5},
-        bbox=[10.0, 10.0, 110.0, 110.0] # 100x100 box
+        bbox=[10.0, 10.0, 110.0, 110.0],
+        mask_b64=mask_png_b64,
     )
     food2 = FoodDetection(
         label="fries",
         score=0.90,
-        mask_pixels=250000, 
+        mask_pixels=250000,
         depth_stats={"min": 1.2, "max": 1.3},
-        bbox=[200.0, 200.0, 300.0, 300.0] # 100x100 box
+        bbox=[200.0, 200.0, 300.0, 300.0],
+        mask_b64=mask_png_b64,
     )
-    
-    # FIX: Make the masks 500x500 to match the depth map
-    mask1 = np.ones((500, 500), dtype=bool)
-    mask2 = np.ones((500, 500), dtype=bool)
-    
+
     return InferenceResult(
         foods=[food1, food2],
         image_width=500,
         image_height=500,
         focal_length_px=800.0,
         depth_unit="relative",
-        depth_map=np.ones((500, 500), dtype=np.float32), 
-        masks=[mask1, mask2]
+        depth_map=np.ones((500, 500), dtype=np.float32),
+        masks=[mask.astype(bool), mask.astype(bool)],
     )
+
 
 @patch("vision_service.inference.api.detect_and_measure")
 def test_api_applies_per_food_scale_map(mock_detect_and_measure, mock_inference_result):
-    """Test that the API correctly parses scale_map and applies correct dimensions."""
+    """The API applies each food's own unvalidated diagnostic dimensions."""
     mock_detect_and_measure.return_value = mock_inference_result
-
-    # Build scale_map with DIFFERENT scales
     scale_map_payload = {
         "burger": {"thickness": 5.0, "diameter": 10.0},
-        "fries": {"thickness": 1.0, "diameter": 2.0}
+        "fries": {"thickness": 1.0, "diameter": 2.0},
     }
 
-    fake_image = io.BytesIO(b"fake image bytes")
-    
     response = client.post(
         "/detect",
-        files={"file": ("test.jpg", fake_image, "image/jpeg")},
+        files={"file": ("test.jpg", io.BytesIO(b"fake image bytes"), "image/jpeg")},
         data={
             "labels": "burger,fries",
-            "scale_map": json.dumps(scale_map_payload)
+            "scale_map": json.dumps(scale_map_payload),
         },
-        headers={"x-api-token": "test-token"}
+        headers={"x-api-token": "test-token"},
     )
 
-    # Assertions
     assert response.status_code == 200
-    data = response.json()
-    foods = data["foods"]
-    
-    assert len(foods) == 2
-    
-    burger = next(f for f in foods if f["label"] == "burger")
-    fries = next(f for f in foods if f["label"] == "fries")
+    foods = response.json()["foods"]
+    burger = next(food for food in foods if food["label"] == "burger")
+    fries = next(food for food in foods if food["label"] == "fries")
 
-    # VLM-provided dimensions may drive diagnostics, but never a metric result.
     assert burger["volume_status"] == "unvalidated"
     assert burger["volume_cm3"] is None
     assert burger["experimental_volume_cm3"] is None
@@ -90,10 +88,43 @@ def test_api_applies_per_food_scale_map(mock_detect_and_measure, mock_inference_
     assert fries["experimental_volume_cm3"] is None
     assert abs(fries["experimental_scale_factor_cm_per_px"] - 0.02) < 0.0001
 
-    # Each food keeps its own diagnostic scale, but neither is certified metric.
     assert (
         burger["experimental_scale_factor_cm_per_px"]
         != fries["experimental_scale_factor_cm_per_px"]
     )
-    assert data["depth_unit"] == "relative"
-    print("\n✅ TEST PASSED: Burger and Fries received different scale factors.")
+    assert response.json()["depth_unit"] == "relative"
+
+
+@patch("vision_service.inference.api.detect_and_measure")
+def test_include_arrays_keeps_visualization_mask_png_compatible(
+    mock_detect_and_measure,
+    mock_inference_result,
+):
+    """Optional NPZ arrays must not overwrite the PNG consumed by the backend."""
+    mock_detect_and_measure.return_value = mock_inference_result
+
+    response = client.post(
+        "/detect",
+        files={"file": ("test.jpg", io.BytesIO(b"fake image bytes"), "image/jpeg")},
+        data={"labels": "burger", "include_arrays": "true"},
+        headers={"x-api-token": "test-token"},
+    )
+
+    assert response.status_code == 200
+    food = response.json()["foods"][0]
+
+    png_bytes = base64.b64decode(food["mask_b64"])
+    decoded_png = cv2.imdecode(
+        np.frombuffer(png_bytes, dtype=np.uint8),
+        cv2.IMREAD_GRAYSCALE,
+    )
+    assert decoded_png is not None
+
+    npz_bytes = base64.b64decode(food["mask_array_b64"])
+    with np.load(io.BytesIO(npz_bytes)) as arrays:
+        assert arrays["arr"].ndim == 2
+        assert arrays["arr"].dtype == np.uint8
+
+    depth_npz = base64.b64decode(response.json()["depth_map_b64"])
+    with np.load(io.BytesIO(depth_npz)) as arrays:
+        assert arrays["arr"].ndim == 2
