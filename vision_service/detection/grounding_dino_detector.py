@@ -1,23 +1,35 @@
 import os
 import json
+import logging
+
 import requests
 
-from vision_service.config import VISION_INFERENCE_ENDPOINT
+from vision_service.settings import settings
 from vision_service.detection.detector import BaseDetector
 
 
+logger = logging.getLogger(__name__)
+
+
 class GroundingDINODetector(BaseDetector):
+    """HTTP client for the separately hosted vision inference service."""
 
     def __init__(self):
-        self.endpoint = f"{VISION_INFERENCE_ENDPOINT}/detect"
-        self.api_token = os.environ.get("VISION_API_TOKEN")
-
-        if not self.api_token:
-            raise ValueError(
-                "VISION_API_TOKEN must be set for the backend to call the vision worker."
+        if not settings.inference_endpoint:
+            raise RuntimeError(
+                "VISION_INFERENCE_ENDPOINT must be configured for the backend."
             )
 
-        print(f"GroundingDINO endpoint: {self.endpoint}")
+        self.endpoint = f"{settings.inference_endpoint}/detect"
+        self.api_token = settings.api_token
+        self.app_environment = settings.app_env
+
+        if self.app_environment == "production" and not self.api_token:
+            raise RuntimeError(
+                "VISION_API_TOKEN must be configured when APP_ENV=production."
+            )
+
+        logger.info("Vision inference endpoint configured")
 
     def detect(
         self,
@@ -34,9 +46,9 @@ class GroundingDINODetector(BaseDetector):
         if scale_map:
             data["scale_map"] = json.dumps(scale_map)
 
-        headers = {
-            "x-api-token": self.api_token,
-        }
+        headers = {}
+        if self.api_token:
+            headers["x-api-token"] = self.api_token
 
         with open(image_path, "rb") as image:
             response = requests.post(
@@ -50,7 +62,7 @@ class GroundingDINODetector(BaseDetector):
                 },
                 data=data,
                 headers=headers,
-                timeout=300,
+                timeout=settings.request_timeout_seconds,
             )
 
         response.raise_for_status()
