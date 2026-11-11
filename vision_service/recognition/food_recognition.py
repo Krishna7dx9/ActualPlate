@@ -30,6 +30,10 @@ class RecognitionConfigurationError(RuntimeError):
     """Raised when the vision provider configuration is missing or invalid."""
 
 
+class RecognitionOutputError(RuntimeError):
+    """Raised when the provider does not return the promised JSON contract."""
+
+
 @lru_cache(maxsize=1)
 def _system_prompt() -> str:
     try:
@@ -182,10 +186,12 @@ def detect_food(image_bytes: bytes) -> list[dict]:
     choices = getattr(response, "choices", None)
     content = getattr(getattr(choices[0], "message", None), "content", None) if choices else None
     if not isinstance(content, str) or not content.strip():
-        return []
+        raise RecognitionOutputError("Food-recognition provider returned an empty response.")
 
     try:
         parsed = json.loads(_strip_json_fences(content))
-    except json.JSONDecodeError:
-        return []
+    except json.JSONDecodeError as exc:
+        raise RecognitionOutputError("Food-recognition provider returned invalid JSON.") from exc
+    if not isinstance(parsed, list):
+        raise RecognitionOutputError("Food-recognition provider returned an unexpected JSON shape.")
     return _validate_items(parsed)
