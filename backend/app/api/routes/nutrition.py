@@ -15,6 +15,7 @@ def nutrition(
         max_length=120,
         description="Food name to search in the nutrition database",
     ),
+    mass_g: float | None = Query(default=None, gt=0, le=100000, description="Optional estimated food mass in grams"),
 ):
     query = food.strip()
     if not query:
@@ -37,8 +38,11 @@ def nutrition(
             content={"detail": message, "provider": "fatsecret"},
         )
 
+    if mass_g is None:
+        return nutrition_data
+
     try:
-        result = format_nutrition_response(nutrition_data)
+        result = format_nutrition_response(nutrition_data, mass_g)
     except (KeyError, TypeError, ValueError, OverflowError):
         return JSONResponse(
             status_code=502,
