@@ -6,7 +6,7 @@ Runs the full detection pipeline on a single image:
     image + labels
       -> Grounding DINO           (boxes, scores, text labels)
       -> SAM2                     (per-box masks)
-      -> MoGe-2                   (metric depth map + focal length)
+      -> MoGe-2                   (relative depth map + predicted intrinsics)
       -> per-food depth statistics
 
 Returns an InferenceResult: a dataclass that separates JSON-safe
@@ -54,7 +54,7 @@ class FoodDetection:
     label: str
     score: float
     mask_pixels: int
-    depth_m: dict  # {"min": float | None, "median": ..., "max": ...}
+    depth_stats: dict  # Relative model-depth statistics; not physical meters.
     bbox: list[float] | None = None
     mask_b64: str | None = None
 
@@ -85,7 +85,7 @@ class InferenceResult:
                     "label": f.label,
                     "score": f.score,
                     "mask_pixels": f.mask_pixels,
-                    "depth_m": f.depth_m,
+                    "depth_stats": f.depth_stats,
                     "bbox": f.bbox,
                     "mask_b64": f.mask_b64,
                 }
@@ -161,8 +161,8 @@ def _visualize_depth(depth_map) -> None:
 
     plt.figure(figsize=(8, 8))
     plt.imshow(depth_map, cmap="inferno")
-    plt.colorbar(label="Depth (meters)")
-    plt.title("MoGe-2 Depth")
+    plt.colorbar(label="Relative model depth")
+    plt.title("MoGe-2 Relative Depth")
     plt.axis("off")
     plt.show()
 
@@ -228,7 +228,7 @@ def detect_and_measure(
     if SHOW_VISUALIZATIONS:
         _visualize_masks(image_np, masks, boxes, detected_labels, scores)
 
-    # --- MoGe-2: image -> metric depth map + focal length.
+    # --- MoGe-2: image -> relative depth map + predicted intrinsics.
     # Convert image to tensor (BGR -> RGB is already done, just normalize and reshape)
     image_tensor = torch.tensor(image_np / 255.0, dtype=torch.float32, device=DEVICE)
     image_tensor = image_tensor.permute(2, 0, 1).unsqueeze(0) # Shape: (1, 3, H, W)
@@ -242,9 +242,15 @@ def detect_and_measure(
     intrinsics = prediction.get("intrinsics")
     if intrinsics is not None:
         focal_length_px = float(intrinsics[0, 0, 0].item())
+    elif focal_px_override is not None:
+        focal_length_px = float(focal_px_override)
     else:
-        # Use override if provided, otherwise fallback
-        focal_length_px = focal_px_override if focal_px_override else 1000.0
+        raise ValueError(
+            "Camera focal length is unavailable; provide calibrated focal_px."
+        )
+
+    if not np.isfinite(focal_length_px) or focal_length_px <= 0:
+        raise ValueError("Camera focal length must be a finite positive value.")
 
     if depth_map.shape != image_np.shape[:2]:
         depth_map = cv2.resize(
@@ -286,7 +292,7 @@ def detect_and_measure(
                 label=str(label),
                 score=float(score),
                 mask_pixels=int(mask.sum()),
-                depth_m=depth_stats,
+                depth_stats=depth_stats,
                 bbox=box.tolist() if hasattr(box, "tolist") else [float(x) for x in box],
                 mask_b64=mask_b64,
             )
@@ -297,7 +303,7 @@ def detect_and_measure(
         image_width=image.width,
         image_height=image.height,
         focal_length_px=float(focal_length_px),
-        depth_unit="meters",
+        depth_unit="relative",
         depth_map=depth_map,
         masks=masks,
     )
