@@ -31,3 +31,11 @@ test('demo handles empty streams and partial nutrition without inventing totals'
   assert.match(html, /Not available/);
   assert.match(html, /Number\.isFinite\(value\)/);
 });
+
+test('build includes baseline static security headers', () => {
+  const headersPath = path.join(process.cwd(), 'dist', '_headers');
+  const headers = fs.readFileSync(headersPath, 'utf8');
+  assert.match(headers, /X-Content-Type-Options: nosniff/);
+  assert.match(headers, /X-Frame-Options: DENY/);
+  assert.match(headers, /Content-Security-Policy:/);
+});
