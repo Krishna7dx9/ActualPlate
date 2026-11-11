@@ -213,7 +213,7 @@ async def detect(
                 "label": food.label,
                 "score": food.score,
                 "mask_pixels": food.mask_pixels,
-                "depth_m": food.depth_m,
+                "depth_stats": food.depth_stats,
                 "bbox": getattr(food, "bbox", None),
                 "mask_b64": getattr(food, "mask_b64", None),
             }
