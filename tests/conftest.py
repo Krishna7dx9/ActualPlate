@@ -22,3 +22,8 @@ os.environ["TEXT_THRESHOLD"] = "0.25"
 os.environ["SHOW_VISUALIZATIONS"] = "false"
 os.environ["VISION_MAX_ARRAY_SIDE"] = "512"
 os.environ["VISION_REQUEST_TIMEOUT_SECONDS"] = "300"
+
+# Test-only signing and hashing secrets; never use these outside tests.
+os.environ["JWT_SECRET_KEY"] = "test-jwt-secret-key-at-least-32-bytes-long"
+os.environ["API_KEY_HASH_SECRET"] = "test-api-key-hash-secret-at-least-32-bytes"
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
