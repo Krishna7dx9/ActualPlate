@@ -9,10 +9,9 @@ Two endpoints:
 The app holds no model state of its own. Model loading is owned by
 models.py and is triggered lazily by the first /detect request.
 
-Auth: if VISION_API_TOKEN is set in the environment, /detect requires
-the header X-API-Token to match. If unset, the endpoint is open.
-This is intended for local/Colab development; set the token in
-production.
+Auth: when VISION_API_TOKEN is configured, /detect requires the header
+X-API-Token to match. Tokenless access is allowed only outside production.
+Production startup fails if VISION_API_TOKEN is missing.
 
 Response format:
 
@@ -26,12 +25,12 @@ base64-encoded numpy arrays, downsampled to a 512-pixel max side:
 Downsampling bounds the response size; Cloudflare free tunnels
 drop the connection on multi-megabyte bodies.
 
-If the request sets `debug=true`, each food record includes a
-`_debug` sub-dict from estimate_volume_cm3: plane normal, plane
-offset, support inliers, per-stage ray distances, and the height
-distribution. This runs on the full-resolution depth map and
-mask on the server, so the numbers reflect the pipeline's actual
-geometry.
+VLM-provided dimensions are not metric calibration evidence. The API
+therefore returns `volume_cm3: null` until an independently validated
+metric scale source is available. A separately named
+`experimental_volume_cm3` may be returned for research diagnostics,
+with `volume_status: "unvalidated"`; it must not be used for nutrition
+or customer-facing physical measurements.
 """
 
 from __future__ import annotations
@@ -39,6 +38,7 @@ from __future__ import annotations
 import base64
 import io
 import os
+from pathlib import Path
 import shutil
 import tempfile
 import uuid
@@ -52,12 +52,11 @@ from fastapi.responses import JSONResponse
 
 from vision_service.inference.inference import detect_and_measure
 from vision_service.inference.models import models_loaded
-from vision_service.inference.volume import estimate_volume_cm3
+from vision_service.settings import settings
 
 
-APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
-VISION_API_TOKEN = os.environ.get("VISION_API_TOKEN")
-VISION_API_TOKEN = VISION_API_TOKEN.strip() if VISION_API_TOKEN else None
+APP_ENV = settings.app_env
+VISION_API_TOKEN = settings.api_token
 
 
 def _validate_auth_configuration(
@@ -74,7 +73,41 @@ def _validate_auth_configuration(
 _validate_auth_configuration(APP_ENV, VISION_API_TOKEN)
 
 # Maximum side length for arrays returned when include_arrays=true.
-MAX_ARRAY_SIDE = 512
+MAX_ARRAY_SIDE = settings.max_array_side
+
+
+def _load_label_aliases() -> dict[str, str]:
+    configured_path = os.environ.get("VISION_LABEL_ALIASES_FILE")
+    alias_path = (
+        Path(configured_path).expanduser()
+        if configured_path
+        else Path(__file__).resolve().parents[1]
+        / "recognition"
+        / "label_aliases.json"
+    )
+    try:
+        with alias_path.open("r", encoding="utf-8") as alias_file:
+            raw_aliases = json.load(alias_file)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError("Unable to load vision label alias configuration.") from exc
+
+    if not isinstance(raw_aliases, dict):
+        raise ValueError("Vision label aliases must be a JSON object.")
+
+    aliases: dict[str, str] = {}
+    for key, value in raw_aliases.items():
+        if (
+            not isinstance(key, str)
+            or not key.strip()
+            or not isinstance(value, str)
+            or not value.strip()
+        ):
+            raise ValueError("Vision label aliases must map non-empty strings.")
+        aliases[key.strip().lower()] = value.strip().lower()
+    return aliases
+
+
+LABEL_ALIASES = _load_label_aliases()
 
 app = FastAPI(
     title="ActualPlate Vision API",
@@ -190,12 +223,10 @@ async def detect(
                 food_scale = parsed_scale_map[food_label_lower]
             else:
                 # 2. Controlled Alias Match (Handles known DINO truncations safely)
-                aliases = {
-                    "corn": "corn on the cob",
-                    "nuggets": "chicken nugget",
-                    "fries": "french fries"
-                }
-                alias_target = aliases.get(food_label_lower, food_label_lower)
+                alias_target = LABEL_ALIASES.get(
+                    food_label_lower,
+                    food_label_lower,
+                )
                 
                 if alias_target in parsed_scale_map:
                     food_scale = parsed_scale_map[alias_target]
@@ -206,56 +237,74 @@ async def detect(
                     if len(possible_matches) == 1:
                         food_scale = parsed_scale_map[possible_matches[0]]
                         
-            estimated_thickness_cm = food_scale.get("thickness")
-            estimated_diameter_cm = food_scale.get("diameter")
-
             food_record = {
                 "label": food.label,
                 "score": food.score,
                 "mask_pixels": food.mask_pixels,
-                "depth_m": food.depth_m,
+                "depth_stats": food.depth_stats,
                 "bbox": getattr(food, "bbox", None),
                 "mask_b64": getattr(food, "mask_b64", None),
             }
 
-            # --- NEW 3D NORMALIZATION MATH ---
-            if estimated_thickness_cm is not None and estimated_diameter_cm is not None:
+            # VLM dimensions are visual estimates, not metric calibration evidence.
+            # Keep the heuristic only as an explicitly experimental diagnostic.
+            estimated_thickness = food_scale.get("thickness")
+            estimated_diameter = food_scale.get("diameter")
+            has_candidate_dimensions = (
+                isinstance(estimated_thickness, (int, float))
+                and np.isfinite(estimated_thickness)
+                and estimated_thickness > 0
+                and isinstance(estimated_diameter, (int, float))
+                and np.isfinite(estimated_diameter)
+                and estimated_diameter > 0
+            )
+
+            food_record["volume_cm3"] = None
+            food_record["experimental_volume_cm3"] = None
+            food_record["volume_status"] = "unavailable"
+            food_record["volume_reason"] = (
+                "Metric scale evidence is required before reporting physical volume."
+            )
+
+            if has_candidate_dimensions:
+                food_record["volume_status"] = "unvalidated"
+                food_record["volume_reason"] = (
+                    "Volume uses VLM-estimated dimensions without "
+                    "independent metric calibration."
+                )
+
                 food_depth = result.depth_map[mask]
-                
-                if len(food_depth) > 0:
-                    min_d = float(np.min(food_depth))
-                    max_d = float(np.max(food_depth))
-                    
-                    if max_d > min_d:
-                        # 1. Normalize to 0-1 (Compresses the shape)
-                        normalized = (max_d - result.depth_map) / (max_d - min_d)
+                food_depth = food_depth[np.isfinite(food_depth)]
+
+                bbox = getattr(food, "bbox", None)
+                if (
+                    food_depth.size > 0
+                    and bbox is not None
+                    and len(bbox) == 4
+                    and float(bbox[2]) > float(bbox[0])
+                ):
+                    estimated_cm_per_pixel = (
+                        float(estimated_diameter)
+                        / float(bbox[2] - bbox[0])
+                    )
+                    food_record["experimental_scale_factor_cm_per_px"] = (
+                        estimated_cm_per_pixel
+                    )
+
+                    min_depth = float(np.min(food_depth))
+                    max_depth = float(np.max(food_depth))
+                    if max_depth > min_depth:
+                        normalized = (max_depth - result.depth_map) / (
+                            max_depth - min_depth
+                        )
                         normalized = np.clip(normalized, 0, 1)
-                    else:
-                        normalized = np.zeros_like(result.depth_map)
-                        
-                    # 2. Multiply by Gemma's real-world thickness
-                    real_height = normalized * float(estimated_thickness_cm)
-                    
-                    # 3. Calculate real-world pixel area
-                    bbox = getattr(food, "bbox", [0,0,0,0])
-                    bbox_w_px = max(1.0, bbox[2] - bbox[0])
-                    cm_per_px = float(estimated_diameter_cm) / bbox_w_px
-                    pixel_area_cm2 = cm_per_px ** 2
-                    
-                    # 4. Integrate Volume (Sum of Height * Area for each pixel)
-                    vol = float(np.sum(real_height[mask]) * pixel_area_cm2)
-                    
-                    food_record["volume_cm3"] = vol
-                    food_record["volume_status"] = "valid"
-                    food_record["scale_factor_applied"] = cm_per_px
-                else:
-                    food_record["volume_cm3"] = 0.0
-                    food_record["volume_status"] = "unreliable"
-            else:
-                # FAIL SAFELY: Do not use the unvalidated MoGe-2 absolute scale fallback
-                food_record["volume_cm3"] = None
-                food_record["volume_status"] = "unreliable"
-                food_record["volume_error"] = "No scale available or label mismatch"
+                        estimated_height = (
+                            normalized * float(estimated_thickness)
+                        )
+                        food_record["experimental_volume_cm3"] = float(
+                            np.sum(estimated_height[mask])
+                            * estimated_cm_per_pixel ** 2
+                        )
 
             if include_arrays:
                 m = np.asarray(mask, dtype=np.uint8)

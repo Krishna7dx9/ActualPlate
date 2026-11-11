@@ -10,5 +10,5 @@ The initial architecture relied on Apple's Depth Pro for monocular metric depth 
 We removed Apple Depth Pro entirely and replaced it with MoGe-2.
 
 ## Consequences
-- **Pros:** Reduced Docker image size by ~2GB. MoGe-2 uses the MIT license, clearing legal blockers for commercialization. It provides excellent relative 3D geometry.
-- **Cons:** MoGe-2 does not provide absolute metric scale out-of-the-box, requiring us to rely on the VLM for physical scale anchors.
+- **Pros:** Reduced Docker image size by ~2GB. MoGe-2 uses the MIT license and provides useful monocular geometry.
+- **Cons:** MoGe-2 output does not independently establish absolute metric scale. VLM-estimated food dimensions are not metric anchors; see ADR-0003 for the required measurement contract.

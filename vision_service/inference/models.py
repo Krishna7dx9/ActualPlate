@@ -4,7 +4,7 @@ Model loading for the ActualPlate inference service.
 Owns the lifetime of every GPU model the service uses:
 - Grounding DINO (open-vocabulary object detection)
 - SAM2 (image segmentation)
-- MoGe-2 (metric monocular depth - MIT License)
+- MoGe-2 (monocular geometry/depth; no absolute metric-scale guarantee)
 
 Models are loaded lazily on first access and cached for the process
 lifetime. Loading is expensive (~1–3 minutes on a cold GPU host), so
@@ -13,31 +13,20 @@ the service loads once and serves many requests.
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import torch
+
+from vision_service.settings import settings
 
 # --------------------------------------------------------------------
 # Configuration
 # --------------------------------------------------------------------
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-GROUNDING_DINO_MODEL_ID = os.environ.get(
-    "GROUNDING_DINO_MODEL_ID",
-    "IDEA-Research/grounding-dino-base",
-)
-
-SAM2_MODEL_ID = os.environ.get(
-    "SAM2_MODEL_ID",
-    "facebook/sam2-hiera-large",
-)
-
-# MoGe-2 (MIT License) for metric monocular depth.
-MOGE_MODEL_ID = os.environ.get(
-    "MOGE_MODEL_ID",
-    "Ruicheng/moge-2-vitl-normal",
-)
+GROUNDING_DINO_MODEL_ID = settings.grounding_dino_model_id
+SAM2_MODEL_ID = settings.sam2_model_id
+MOGE_MODEL_ID = settings.moge_model_id
 
 # --------------------------------------------------------------------
 # Lazy-loaded singletons
@@ -73,7 +62,9 @@ def get_sam2_predictor() -> Any:
 def get_moge() -> Any:
     """
     Load (once) and return the MoGe-2 model.
-    MoGe-2 predicts affine-invariant 3D point maps and metric depth.
+
+    Its monocular geometry/depth output must not be assumed to establish
+    absolute scene scale for an individual image.
     """
     global _moge_model
     if _moge_model is None:
