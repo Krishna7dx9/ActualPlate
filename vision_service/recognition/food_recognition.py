@@ -1,4 +1,6 @@
+"""Food recognition provider client and response validation."""
 
+from __future__ import annotations
 
 import base64
 import json
@@ -23,21 +25,23 @@ except OSError as exc:
 
 @lru_cache(maxsize=1)
 def _get_client() -> OpenAI:
-    """Create the provider client lazily so missing secrets fail at use time."""
+    """Create the provider client lazily using centralized timeout and credentials."""
     if not settings.openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY must be configured for food recognition.")
     return OpenAI(
         api_key=settings.openrouter_api_key,
         base_url=settings.openrouter_base_url,
+        timeout=settings.request_timeout_seconds,
     )
 
+
 def _strip_json_fences(text: str) -> str:
-    cleaned = re.sub(r"^```(?:json)?\s*", "", text.strip())
-    cleaned = re.sub(r"\s*```$", "", cleaned)
-    return cleaned
+    cleaned = re.sub(r"^\x60\x60\x60(?:json)?\s*", "", text.strip())
+    return re.sub(r"\s*\x60\x60\x60$", "", cleaned)
+
 
 def _positive_finite_number(value) -> float | None:
-    if not isinstance(value, (int, float)):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     numeric_value = float(value)
     if not math.isfinite(numeric_value) or numeric_value <= 0:
@@ -45,7 +49,7 @@ def _positive_finite_number(value) -> float | None:
     return numeric_value
 
 
-def _validate_items(items) -> list:
+def _validate_items(items) -> list[dict]:
     if not isinstance(items, list):
         return []
 
@@ -73,7 +77,8 @@ def _validate_items(items) -> list:
         )
     return valid
 
-def detect_food(image_bytes: bytes) -> list:
+
+def detect_food(image_bytes: bytes) -> list[dict]:
     with Image.open(BytesIO(image_bytes)) as image:
         image_format = image.format
     image_mime = Image.MIME.get(image_format)
@@ -81,7 +86,6 @@ def detect_food(image_bytes: bytes) -> list:
         raise ValueError("Food recognition received an unsupported image format.")
 
     image_base64 = base64.b64encode(image_bytes).decode("utf-8")
-
     response = _get_client().chat.completions.create(
         model=settings.openrouter_model,
         max_tokens=settings.openrouter_max_tokens,
@@ -90,18 +94,26 @@ def detect_food(image_bytes: bytes) -> list:
                 "role": "user",
                 "content": [
                     {"type": "text", "text": SYSTEM_PROMPT},
-                    {"type": "image_url", "image_url": {"url": f"data:{image_mime};base64,{image_base64}"}},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{image_mime};base64,{image_base64}"
+                        },
+                    },
                 ],
             }
         ],
     )
+
+    if not response.choices:
+        return []
     content = response.choices[0].message.content
-    if not content: return []
-    
-    cleaned = _strip_json_fences(content)
+    if not content:
+        return []
+
     try:
-        parsed = json.loads(cleaned)
+        parsed = json.loads(_strip_json_fences(content))
     except json.JSONDecodeError:
         return []
-        
+
     return _validate_items(parsed)
