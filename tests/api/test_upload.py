@@ -1,8 +1,16 @@
 from fastapi.testclient import TestClient
+from io import BytesIO
+from PIL import Image
 from unittest.mock import patch, MagicMock, AsyncMock
 from backend.app.main import app
 
 client = TestClient(app)
+
+
+def _valid_png_bytes():
+    image_buffer = BytesIO()
+    Image.new("RGB", (8, 8)).save(image_buffer, format="PNG")
+    return image_buffer.getvalue()
 
 @patch("requests.post")
 @patch("backend.app.services.pipeline.detect_food")
@@ -21,7 +29,7 @@ def test_single_food(mock_detect_food, mock_requests_post):
 
     response = client.post(
         "/upload-image",
-        files={"file": ("pizza.jpg", b"fake", "image/jpeg")}
+        files={"file": ("pizza.png", _valid_png_bytes(), "image/png")}
     )
     assert response.status_code == 200
 
@@ -46,7 +54,7 @@ def test_unhandled_exception_does_not_expose_internal_details():
     ):
         response = safe_client.post(
             "/upload-image",
-            files={"file": ("image.jpg", b"placeholder", "image/jpeg")},
+            files={"file": ("image.png", _valid_png_bytes(), "image/png")},
         )
 
     assert response.status_code == 500
