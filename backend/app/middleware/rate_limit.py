@@ -33,7 +33,7 @@ class RateLimitMiddleware:
         if (
             scope["type"] != "http"
             or scope.get("method") == "OPTIONS"
-            or scope.get("path") in {"/v1/system/health", "/v1/system/ready"}
+            or scope.get("path") in {"/v1/system/live", "/v1/system/health", "/v1/system/ready"}
         ):
             await self.app(scope, receive, send)
             return
