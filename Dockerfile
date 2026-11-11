@@ -3,13 +3,22 @@ FROM pytorch/pytorch:2.14.1-cuda12.6-cudnn9-runtime
 
 ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    VIRTUAL_ENV=/opt/venv
+
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     libgl1 \
     libglib2.0-0 \
+    python3-venv \
     && rm -rf /var/lib/apt/lists/*
+
+# Use an isolated environment while inheriting the CUDA-enabled PyTorch
+# installation supplied by the base image. This avoids PEP 668 system-pip
+# restrictions without replacing the base image's GPU runtime.
+RUN python -m venv --system-site-packages "${VIRTUAL_ENV}"
 
 WORKDIR /app
 
