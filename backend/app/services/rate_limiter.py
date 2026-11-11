@@ -105,6 +105,17 @@ class RateLimiter:
             events.append(now)
             return True, max(0, self.limit - len(events)), 0
 
+    async def health(self) -> dict[str, str]:
+        if not self.redis_url:
+            return {"status": "local", "mode": "in_memory"}
+        if self._redis is None:
+            self._redis = Redis.from_url(self.redis_url, decode_responses=True)
+        try:
+            await self._redis.ping()
+        except RedisError as exc:
+            raise RateLimiterUnavailable("Shared rate-limit storage is unavailable.") from exc
+        return {"status": "ok", "mode": "redis"}
+
     async def close(self) -> None:
         if self._redis is not None:
             await self._redis.aclose()
