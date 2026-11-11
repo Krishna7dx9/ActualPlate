@@ -9,10 +9,9 @@ Two endpoints:
 The app holds no model state of its own. Model loading is owned by
 models.py and is triggered lazily by the first /detect request.
 
-Auth: if VISION_API_TOKEN is set in the environment, /detect requires
-the header X-API-Token to match. If unset, the endpoint is open.
-This is intended for local/Colab development; set the token in
-production.
+Auth: when VISION_API_TOKEN is configured, /detect requires the header
+X-API-Token to match. Tokenless access is allowed only outside production.
+Production startup fails if VISION_API_TOKEN is missing.
 
 Response format:
 
@@ -52,7 +51,6 @@ from fastapi.responses import JSONResponse
 
 from vision_service.inference.inference import detect_and_measure
 from vision_service.inference.models import models_loaded
-from vision_service.inference.volume import estimate_volume_cm3
 
 
 APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
