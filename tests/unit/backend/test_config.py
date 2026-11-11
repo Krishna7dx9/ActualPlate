@@ -7,6 +7,7 @@ def test_cors_origins_are_parsed_from_environment(monkeypatch):
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("MAX_UPLOAD_BYTES", "10485760")
     monkeypatch.setenv("MAX_IMAGE_PIXELS", "40000000")
+    monkeypatch.setenv("MAX_REQUEST_BODY_BYTES", "12582912")
     monkeypatch.setenv(
         "CORS_ALLOWED_ORIGINS",
         "https://app.example, https://admin.example/",
@@ -33,7 +34,19 @@ def test_production_rejects_wildcard_cors_origin(monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("MAX_UPLOAD_BYTES", "10485760")
     monkeypatch.setenv("MAX_IMAGE_PIXELS", "40000000")
+    monkeypatch.setenv("MAX_REQUEST_BODY_BYTES", "12582912")
     monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "*")
 
     with pytest.raises(ValueError, match="Wildcard CORS"):
+        Settings.from_environment()
+
+
+
+def test_request_body_limit_cannot_be_smaller_than_upload_limit(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("MAX_UPLOAD_BYTES", "10485760")
+    monkeypatch.setenv("MAX_REQUEST_BODY_BYTES", "1048576")
+    monkeypatch.setenv("MAX_IMAGE_PIXELS", "40000000")
+
+    with pytest.raises(ValueError, match="MAX_REQUEST_BODY_BYTES"):
         Settings.from_environment()
