@@ -46,9 +46,13 @@ The public website includes the attribution link and links to FatSecret's offici
 
 Do not imply ActualPlate is sponsored or endorsed by FatSecret. Do not remove provider notices or required attribution links.
 
-## Storage and caching
+## Storage, quotas, and permitted use
 
-Do not add Redis or persistent nutrition-response caching until each relevant content type's current FatSecret storage classification and terms are confirmed. The current terms require content not explicitly identified as indefinitely storable to be removed or refreshed within the provider's specified window (the published terms currently describe 24 hours for content not identified as indefinitely storable). Implement any future cache with explicit TTL, refresh/deletion behavior, and a test proving expiry; never use cache to bypass provider rate limits.
+- The published Platform API terms state a default limit of 5,000 calls/day for Basic keys and say limits can change. API editions advertise different limits; confirm ActualPlate's actual account edition and key quota in the FatSecret console before launch. Do not assume a plan tier on ActualPlate grants a matching FatSecret quota.
+- Do not add Redis or persistent nutrition-response caching until each relevant content type's current FatSecret storage classification and terms are confirmed. The published terms require content not explicitly identified as indefinitely storable to be removed or refreshed within 24 hours (or the currently specified window). Implement any future cache with explicit TTL, refresh/deletion behavior, and a test proving expiry; never use cache to bypass provider rate limits.
+- The Platform API terms require clear attribution wherever provider content is displayed and retention of attribution links, a link to the terms, and incorporation of the provider terms into the application's own terms. Keep the official links in the website and make final ToS publication a release gate.
+- The provider terms prohibit using Platform API content to provide diet, nutrition, or health advice. ActualPlate must present results as reference information/estimates, state they are not medical advice, and avoid personalized health guidance based on provider content.
+- Do not assume the default attribution requirement can be removed. White-label use is edition-dependent; verify written account permissions before changing attribution.
 
 ## Failure behavior and observability
 
