@@ -267,15 +267,15 @@ async def process_image_stream(file: UploadFile):
     try:
         image_path = _write_temporary_image(image)
 
-        yield f"data: {json.dumps({'step': 'food_recognition', 'status': 'running'})}\n\n"
+        yield f"data: {json.dumps({'step': 'gemma', 'status': 'running', 'message': 'Food recognition is running'})}\n\n"
         detected_foods = await run_in_threadpool(detect_food, image)
-        yield f"data: {json.dumps({'step': 'food_recognition', 'status': 'done', 'data': detected_foods})}\n\n"
+        yield f"data: {json.dumps({'step': 'gemma', 'status': 'done', 'message': 'Food recognition completed', 'data': detected_foods})}\n\n"
 
         if not detected_foods:
             yield f"data: {json.dumps({'step': 'complete', 'status': 'done', 'nutrition_status': 'not_available'})}\n\n"
             return
 
-        yield f"data: {json.dumps({'step': 'geometry', 'status': 'running'})}\n\n"
+        yield f"data: {json.dumps({'step': 'dino', 'status': 'running', 'message': 'Detection and geometry are running'})}\n\n"
         detections = await run_in_threadpool(
             _detect_geometry,
             image_path,
@@ -289,11 +289,12 @@ async def process_image_stream(file: UploadFile):
             foods_data,
             detections.get("depth_b64", ""),
         )
-        yield f"data: {json.dumps({'step': 'detection', 'status': 'done', 'image': detection_image})}\n\n"
-        yield f"data: {json.dumps({'step': 'segmentation', 'status': 'done', 'image': segmentation_image})}\n\n"
-        yield f"data: {json.dumps({'step': 'depth', 'status': 'done', 'image': depth_image})}\n\n"
+        yield f"data: {json.dumps({'step': 'dino', 'status': 'done', 'message': 'Detection completed', 'image': detection_image})}\n\n"
+        yield f"data: {json.dumps({'step': 'sam2', 'status': 'done', 'message': 'Segmentation completed', 'image': segmentation_image})}\n\n"
+        yield f"data: {json.dumps({'step': 'depth', 'status': 'done', 'message': 'Depth map generated', 'image': depth_image})}\n\n"
+        yield f"data: {json.dumps({'step': 'volume', 'status': 'done', 'message': 'Volume processing completed'})}\n\n"
 
-        yield f"data: {json.dumps({'step': 'nutrition', 'status': 'running'})}\n\n"
+        yield f"data: {json.dumps({'step': 'nutrition', 'status': 'running', 'message': 'Nutrition lookup is running'})}\n\n"
         nutrition_results, nutrition_errors, nutrition_status = (
             await _enrich_nutrition(detected_foods, _merge_volumes(foods_data))
         )
@@ -307,7 +308,7 @@ async def process_image_stream(file: UploadFile):
             "nutrition_status": nutrition_status,
             "nutrition_errors": nutrition_errors,
         }
-        yield f"data: {json.dumps({'step': 'complete', 'status': 'done', 'final': final_payload})}\n\n"
+        yield f"data: {json.dumps({'step': 'nutrition', 'status': 'done', 'message': 'Complete', 'final': final_payload})}\n\n"
     except Exception:
         logger.exception("Image processing stream failed")
         yield f"data: {json.dumps({'step': 'error', 'status': 'failed', 'message': 'Image processing failed'})}\n\n"
