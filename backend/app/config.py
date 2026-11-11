@@ -47,6 +47,7 @@ class Settings:
     access_token_ttl_seconds: int
     redis_url: str | None
     rate_limit_requests_per_minute: int
+    vision_warmup_timeout_seconds: int
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -143,6 +144,16 @@ class Settings:
         if not 1 <= rate_limit_requests_per_minute <= 100000:
             raise ValueError("RATE_LIMIT_REQUESTS_PER_MINUTE must be between 1 and 100000.")
 
+
+        try:
+            vision_warmup_timeout_seconds = int(
+                os.environ.get("VISION_WARMUP_TIMEOUT_SECONDS", "300")
+            )
+        except ValueError as exc:
+            raise ValueError("VISION_WARMUP_TIMEOUT_SECONDS must be an integer.") from exc
+        if not 30 <= vision_warmup_timeout_seconds <= 900:
+            raise ValueError("VISION_WARMUP_TIMEOUT_SECONDS must be between 30 and 900.")
+
         return cls(
             environment=environment,
             cors_allowed_origins=origins,
@@ -157,6 +168,7 @@ class Settings:
             access_token_ttl_seconds=access_token_ttl_seconds,
             redis_url=redis_url,
             rate_limit_requests_per_minute=rate_limit_requests_per_minute,
+            vision_warmup_timeout_seconds=vision_warmup_timeout_seconds,
         )
 
 
