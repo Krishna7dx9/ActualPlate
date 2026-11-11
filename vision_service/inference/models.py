@@ -14,6 +14,7 @@ the service loads once and serves many requests.
 from __future__ import annotations
 
 import os
+import re
 import threading
 from typing import Any
 
@@ -50,15 +51,25 @@ _moge_model: Any = None
 _MODEL_LOAD_LOCK = threading.RLock()
 
 
+def _required_model_revision(variable_name: str) -> str:
+    revision = os.environ.get(variable_name, "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise RuntimeError(
+            f"{variable_name} must be configured as a full 40-character model commit SHA."
+        )
+    return revision
+
+
 def get_grounding_dino() -> tuple[Any, Any]:
     global _processor, _grounding_dino
     with _MODEL_LOAD_LOCK:
         if _grounding_dino is None:
             from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
-            _processor = AutoProcessor.from_pretrained(GROUNDING_DINO_MODEL_ID)
+            revision = _required_model_revision("GROUNDING_DINO_MODEL_REVISION")
+            _processor = AutoProcessor.from_pretrained(GROUNDING_DINO_MODEL_ID, revision=revision)
             _grounding_dino = (
                 AutoModelForZeroShotObjectDetection
-                .from_pretrained(GROUNDING_DINO_MODEL_ID)
+                .from_pretrained(GROUNDING_DINO_MODEL_ID, revision=revision)
                 .to(DEVICE)
             )
             _grounding_dino.eval()
@@ -70,7 +81,8 @@ def get_sam2_predictor() -> Any:
     with _MODEL_LOAD_LOCK:
         if _sam2_predictor is None:
             from sam2.sam2_image_predictor import SAM2ImagePredictor
-            _sam2_predictor = SAM2ImagePredictor.from_pretrained(SAM2_MODEL_ID)
+            revision = _required_model_revision("SAM2_MODEL_REVISION")
+            _sam2_predictor = SAM2ImagePredictor.from_pretrained(SAM2_MODEL_ID, revision=revision)
         return _sam2_predictor
 
 
@@ -83,7 +95,8 @@ def get_moge() -> Any:
     with _MODEL_LOAD_LOCK:
         if _moge_model is None:
             from moge.model.v2 import MoGeModel
-            _moge_model = MoGeModel.from_pretrained(MOGE_MODEL_ID).to(DEVICE)
+            revision = _required_model_revision("MOGE_MODEL_REVISION")
+            _moge_model = MoGeModel.from_pretrained(MOGE_MODEL_ID, revision=revision).to(DEVICE)
             _moge_model.eval()
         return _moge_model
 
