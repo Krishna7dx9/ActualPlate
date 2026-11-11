@@ -85,3 +85,32 @@ def test_rejects_unknown_app_environment(value, monkeypatch):
 
     with pytest.raises(ValueError, match="APP_ENV"):
         Settings.from_environment()
+
+
+def test_production_requires_shared_redis_rate_limiter(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("MAX_UPLOAD_BYTES", "10485760")
+    monkeypatch.setenv("MAX_REQUEST_BODY_BYTES", "12582912")
+    monkeypatch.setenv("MAX_IMAGE_PIXELS", "40000000")
+    monkeypatch.setenv("VISION_INFERENCE_ENDPOINT", "https://vision.example.com")
+    monkeypatch.setenv("VISION_API_TOKEN", "production-test-token")
+    monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "https://app.example.com")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://user:pass@db.example.com/actualplate")
+    monkeypatch.setenv("JWT_SECRET_KEY", "production-test-jwt-secret-at-least-32-bytes")
+    monkeypatch.setenv("API_KEY_HASH_SECRET", "production-test-api-key-hash-at-least-32")
+    monkeypatch.delenv("REDIS_URL", raising=False)
+
+    with pytest.raises(ValueError, match="REDIS_URL"):
+        Settings.from_environment()
+
+
+def test_rate_limit_setting_is_validated(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("MAX_UPLOAD_BYTES", "10485760")
+    monkeypatch.setenv("MAX_REQUEST_BODY_BYTES", "12582912")
+    monkeypatch.setenv("MAX_IMAGE_PIXELS", "40000000")
+    monkeypatch.setenv("VISION_INFERENCE_ENDPOINT", "http://localhost:8001")
+    monkeypatch.setenv("RATE_LIMIT_REQUESTS_PER_MINUTE", "0")
+
+    with pytest.raises(ValueError, match="RATE_LIMIT_REQUESTS_PER_MINUTE"):
+        Settings.from_environment()
