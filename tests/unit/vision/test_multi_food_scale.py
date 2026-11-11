@@ -82,12 +82,12 @@ def test_api_applies_per_food_scale_map(mock_detect_and_measure, mock_inference_
     # VLM-provided dimensions may drive diagnostics, but never a metric result.
     assert burger["volume_status"] == "unvalidated"
     assert burger["volume_cm3"] is None
-    assert burger["experimental_volume_cm3"] is not None
+    assert burger["experimental_volume_cm3"] is None
     assert abs(burger["experimental_scale_factor_cm_per_px"] - 0.1) < 0.0001
 
     assert fries["volume_status"] == "unvalidated"
     assert fries["volume_cm3"] is None
-    assert fries["experimental_volume_cm3"] is not None
+    assert fries["experimental_volume_cm3"] is None
     assert abs(fries["experimental_scale_factor_cm_per_px"] - 0.02) < 0.0001
 
     # Each food keeps its own diagnostic scale, but neither is certified metric.
