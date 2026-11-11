@@ -53,3 +53,10 @@ def test_production_requires_provider_credentials(monkeypatch):
 
     with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
         VisionSettings.from_environment()
+
+@pytest.mark.parametrize("value", ["prod", "staging", "production-like", ""])
+def test_vision_settings_reject_unknown_app_environment(value, monkeypatch):
+    monkeypatch.setenv("APP_ENV", value)
+
+    with pytest.raises(ValueError, match="APP_ENV"):
+        VisionSettings.from_environment()
