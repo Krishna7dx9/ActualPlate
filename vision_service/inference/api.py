@@ -303,8 +303,8 @@ async def detect(
                     "independent metric calibration."
                 )
 
-                food_depth = result.depth_map[mask]
-                food_depth = food_depth[np.isfinite(food_depth)]
+                finite_food_mask = mask & np.isfinite(result.depth_map)
+                food_depth = result.depth_map[finite_food_mask]
                 bbox = getattr(food, "bbox", None)
                 if (
                     food_depth.size > 0
@@ -323,13 +323,20 @@ async def detect(
                     min_depth = float(np.min(food_depth))
                     max_depth = float(np.max(food_depth))
                     if max_depth > min_depth:
-                        normalized = (max_depth - result.depth_map) / (
+                        finite_depth_map = np.nan_to_num(
+                            result.depth_map,
+                            nan=max_depth,
+                            posinf=max_depth,
+                            neginf=min_depth,
+                        )
+                        normalized = (max_depth - finite_depth_map) / (
                             max_depth - min_depth
                         )
                         normalized = np.clip(normalized, 0, 1)
                         estimated_height = normalized * float(estimated_thickness)
                         food_record["experimental_volume_cm3"] = float(
-                            np.sum(estimated_height[mask]) * scale_cm_per_pixel**2
+                            np.sum(estimated_height[finite_food_mask])
+                            * scale_cm_per_pixel**2
                         )
 
             if include_arrays:
