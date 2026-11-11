@@ -180,7 +180,11 @@ async def process_image_stream(file):
         foods_data = detections.get("foods", [])
         
         img_array = cv2.imread(image_path)
-        
+        if img_array is None:
+            logger.error("Validated image could not be decoded by the inference renderer")
+            yield "data: {\"step\":\"error\",\"status\":\"error\",\"message\":\"Image rendering is temporarily unavailable.\"}\\n\\n"
+            return
+
         dino_img = img_array.copy()
         colors = [(0, 255, 0), (0, 165, 255), (255, 0, 0), (255, 255, 0)]
         
