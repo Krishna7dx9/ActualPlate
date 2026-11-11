@@ -112,10 +112,13 @@ class RateLimiter:
         if not self.redis_url:
             return {"status": "local", "mode": "in_memory"}
         if self._redis is None:
-            self._redis = Redis.from_url(self.redis_url, decode_responses=True)
+            try:
+                self._redis = Redis.from_url(self.redis_url, decode_responses=True)
+            except (RedisError, ValueError) as exc:
+                raise RateLimiterUnavailable("Shared rate-limit storage is unavailable.") from exc
         try:
             await self._redis.ping()
-        except RedisError as exc:
+        except (RedisError, ValueError) as exc:
             raise RateLimiterUnavailable("Shared rate-limit storage is unavailable.") from exc
         return {"status": "ok", "mode": "redis"}
 
