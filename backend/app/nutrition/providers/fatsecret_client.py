@@ -108,7 +108,7 @@ def get_access_token() -> str:
         refresh_margin = min(60.0, max(1.0, expires_in * 0.1))
         _access_token = token
         _token_expiry = time.monotonic() + max(0.0, expires_in - refresh_margin)
-        return token
+        return token.strip()
 
 
 def _invalidate_access_token(expected_token: str | None = None) -> None:
