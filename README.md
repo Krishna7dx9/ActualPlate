@@ -1,8 +1,8 @@
 # ActualPlate — AI Food Volume & Nutrition Estimation
 
-ActualPlate is an AI-based food volume and nutrition estimation system designed to process a single monocular RGB image and estimate food volume, weight, and nutritional information.
+ActualPlate is an experimental food-analysis system designed to process a single monocular RGB image. It combines vision models, monocular geometry, and nutrition-provider data to explore food-volume and nutrition estimation.
 
-The system combines vision models, depth estimation, and geometric processing to produce structured food analysis results.
+**Physical volume and nutrition accuracy are not yet independently validated.** A single monocular image does not uniquely establish absolute scale without a metric cue or a learned prior. See Known Limitations before interpreting any volume or nutrition result as a measurement.
 
 ## Architecture Overview
 
@@ -43,7 +43,7 @@ For a detailed explanation, see [System Architecture](docs/architecture/system-o
 - **Object detection:** Uses Grounding DINO to identify food regions.
 - **Instance segmentation:** Uses SAM2 to obtain food segmentation masks.
 - **Depth estimation:** Uses monocular depth estimation to obtain geometric information from the image.
-- **Volume estimation:** Uses image geometry and depth information to estimate food volume.
+- **Volume research:** Produces geometry diagnostics; authoritative physical volume requires independently validated metric-scale evidence.
 - **Nutrition estimation:** Integrates food analysis with nutrition data retrieval.
 - **Structured inference results:** Separates internal inference outputs from JSON-compatible response data.
 
@@ -67,6 +67,10 @@ See [Known Limitations](docs/KNOWN_LIMITATIONS.md) for details and evaluation ev
 
 ```text
 ActualPlate/
+│
+├── requirements/
+│   ├── backend.txt
+│   └── test.txt
 │
 ├── backend/
 │   └── app/
@@ -143,6 +147,6 @@ The documentation is organized by engineering responsibility.
 | [Inference Pipeline](docs/architecture/inference-pipeline.md) | Image processing and inference execution flow |
 | [Component Design](docs/architecture/component-design.md) | Module responsibilities and component boundaries |
 | [Architecture Decisions](docs/decisions/) | Architecture Decision Records (ADRs) and technical rationale |
-| [Known Limitations](docs/KNOWN_LIMITATIONS.md) | Known constraints, failure conditions, and mitigation strategies |
+| [Known Limitations](docs/KNOWN_LIMITATIONS.md) | Known constraints, failure conditions, and evidence gaps |
 | [Deployment Guide](docs/DEPLOYMENT.md) | Environment setup and deployment instructions |
 | [Benchmarks](docs/benchmarks/) | Evaluation methodology, experiments, and results |
