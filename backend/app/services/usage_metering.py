@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, time, timedelta, timezone
 from math import ceil
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from backend.app.database import SessionLocal
@@ -33,12 +33,16 @@ def _day_window(now: datetime | None = None) -> tuple[datetime, datetime]:
     return start, start + timedelta(days=1)
 
 
-def _used_today(db: Session, organization_id: str, start: datetime) -> int:
+def _used_today(db: Session, organization_id: str, start: datetime, now: datetime) -> int:
+    pending_cutoff = now - timedelta(minutes=10)
     used = db.scalar(
         select(func.coalesce(func.sum(UsageLog.units), 0)).where(
             UsageLog.organization_id == organization_id,
             UsageLog.created_at >= start,
-            or_(UsageLog.status_code.is_(None), UsageLog.status_code < 500),
+            or_(
+                UsageLog.status_code < 500,
+                and_(UsageLog.status_code.is_(None), UsageLog.created_at >= pending_cutoff),
+            ),
         )
     )
     return int(used or 0)
@@ -52,7 +56,7 @@ def current_usage(db: Session, organization_id: str) -> dict:
     if plan is None or not plan.is_active:
         raise OrganizationUnavailable()
     start, resets_at = _day_window()
-    used = _used_today(db, organization_id, start)
+    used = _used_today(db, organization_id, start, datetime.now(timezone.utc))
     return {
         "plan": plan.code,
         "date": start.date().isoformat(),
@@ -85,7 +89,7 @@ def reserve_scan_usage(
 
     now = datetime.now(timezone.utc)
     start, resets_at = _day_window(now)
-    used = _used_today(db, organization_id, start)
+    used = _used_today(db, organization_id, start, now)
     limit = plan.daily_request_limit
     if used >= limit:
         raise DailyQuotaExceeded(used=used, limit=limit, resets_at=resets_at)
