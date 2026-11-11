@@ -32,6 +32,7 @@ class Settings:
     environment: str
     cors_allowed_origins: tuple[str, ...]
     max_upload_bytes: int
+    max_request_body_bytes: int
     max_image_pixels: int
 
     @classmethod
@@ -52,10 +53,21 @@ class Settings:
                 "Wildcard CORS origins are not allowed in production."
             )
 
+        max_upload_bytes = _required_positive_integer("MAX_UPLOAD_BYTES")
+        max_request_body_bytes = _required_positive_integer(
+            "MAX_REQUEST_BODY_BYTES"
+        )
+        if max_request_body_bytes < max_upload_bytes:
+            raise ValueError(
+                "MAX_REQUEST_BODY_BYTES must be greater than or equal to "
+                "MAX_UPLOAD_BYTES."
+            )
+
         return cls(
             environment=environment,
             cors_allowed_origins=origins,
-            max_upload_bytes=_required_positive_integer("MAX_UPLOAD_BYTES"),
+            max_upload_bytes=max_upload_bytes,
+            max_request_body_bytes=max_request_body_bytes,
             max_image_pixels=_required_positive_integer("MAX_IMAGE_PIXELS"),
         )
 
