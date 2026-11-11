@@ -1,0 +1,42 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const outputPath = path.join(process.cwd(), 'dist', 'index.html');
+const html = fs.readFileSync(outputPath, 'utf8');
+
+test('build injects a configured API base URL and removes template placeholders', () => {
+  assert.match(html, /const API_BASE_URL = "https:\/\/api\.example\.test";/);
+  assert.doesNotMatch(html, /\{\{API_[A-Z_]+\}\}/);
+  assert.match(html, /\/upload-image-stream/);
+});
+
+test('landing page explains B2B platform status without promising unshipped features', () => {
+  assert.match(html, /B2B readiness in progress/);
+  assert.match(html, /not yet a finished SaaS/i);
+  assert.match(html, /does not currently claim a validated ≤5%/);
+  assert.match(html, /Organization-scoped API keys/);
+});
+
+test('FatSecret attribution and terms links are present', () => {
+  assert.match(html, /href="https:\/\/platform\.fatsecret\.com">Powered by fatsecret Platform API<\/a>/);
+  assert.match(html, /https:\/\/platform\.fatsecret\.com\/terms/);
+  assert.match(html, /https:\/\/platform\.fatsecret\.com\/attribution/);
+});
+
+test('demo handles empty streams and partial nutrition without inventing totals', () => {
+  assert.match(html, /parsed\.step===\"complete\"&&!parsed\.final/);
+  assert.match(html, /hasUsableNutrition/);
+  assert.match(html, /Not available/);
+  assert.match(html, /Number\.isFinite\(value\)/);
+});
+
+test('build includes baseline static security headers', () => {
+  const headersPath = path.join(process.cwd(), 'dist', '_headers');
+  const headers = fs.readFileSync(headersPath, 'utf8');
+  assert.match(headers, /X-Content-Type-Options: nosniff/);
+  assert.match(headers, /X-Frame-Options: DENY/);
+  assert.match(headers, /Content-Security-Policy:/);
+  assert.doesNotMatch(headers, /localhost/);
+});

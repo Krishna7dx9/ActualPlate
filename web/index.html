@@ -1,512 +1,170 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0a1a1f">
-<title>ActualPlate | Know what’s on your plate</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#0b1b20">
+<meta name="description" content="ActualPlate is building a single-image food analysis API for nutrition, food-tech, and hospitality products. Explore the workflow and integration readiness.">
+<title>ActualPlate — Food analysis infrastructure for product teams</title>
 <style>
-:root{
-  --bg:#0a1a1f; --bg2:#0f262d; --card:rgba(18,44,52,.55); --ink:#f3efe6; --mute:#8ea4a9;
-  --line:rgba(243,239,230,.11); --saffron:#f4b942; --herb:#8fd18b; --chili:#ef6a4c;
-  --serif:'Fraunces',Georgia,serif; --sans:'DM Sans',system-ui,sans-serif;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-html{color-scheme:dark}
-body{
-  min-height:100vh;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;
-  background-image:
-    radial-gradient(900px 500px at 12% -10%,rgba(244,185,66,.10),transparent 60%),
-    radial-gradient(800px 600px at 100% 10%,rgba(46,125,140,.22),transparent 60%);
-  background-attachment:fixed;
-  padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);
-}
-button{font:inherit;color:inherit;cursor:pointer}
-:focus-visible{outline:2px solid var(--saffron);outline-offset:3px}
-
-/* header */
-.top{max-width:1180px;margin:0 auto;padding:22px 24px;display:flex;justify-content:space-between;align-items:center}
-.brand{display:flex;align-items:center;gap:10px;font-family:var(--serif);font-size:1.35rem;font-weight:500;letter-spacing:-.01em}
-.brand svg{width:26px;height:26px}
-.json-btn{background:none;border:1px solid var(--line);border-radius:999px;padding:7px 14px;font-size:.82rem;color:var(--mute);transition:.2s}
-.json-btn:hover{color:var(--ink);border-color:rgba(243,239,230,.3)}
-.json-btn[aria-pressed=true]{background:var(--saffron);border-color:var(--saffron);color:#201605;font-weight:600}
-
-/* layout */
-main{max-width:1180px;margin:0 auto;padding:12px 24px 64px;display:grid;gap:48px;grid-template-columns:1fr}
-@media(min-width:980px){main{grid-template-columns:1.05fr .95fr;gap:72px;align-items:start}.pipeline{position:sticky;top:24px}}
-
-.v{display:none}
-[data-state=idle] .v-idle,[data-state=busy] .v-busy,[data-state=done] .v-done{display:block}
-
-h1{font-family:var(--serif);font-weight:500;font-size:clamp(2.4rem,5.2vw,3.9rem);line-height:1.04;letter-spacing:-.025em;max-width:11ch}
-.lede{color:var(--mute);margin-top:18px;max-width:40ch;font-size:1.02rem}
-
-/* the plate */
-.plate-wrap{display:flex;justify-content:center;margin:40px 0 8px}
-.plate{position:relative;width:min(380px,82vw);aspect-ratio:1}
-.plate svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg);overflow:visible}
-.plate circle{fill:none;stroke-linecap:round}
-.track{stroke:var(--line);stroke-width:2}
-.arc{stroke-width:3.4;stroke-dasharray:0 100;transition:stroke-dasharray 1.1s cubic-bezier(.2,.8,.2,1),stroke-dashoffset 1.1s cubic-bezier(.2,.8,.2,1)}
-.scan{stroke:var(--saffron);stroke-width:3.4;stroke-dasharray:22 78;opacity:0;transform-origin:50% 50%}
-[data-state=busy] .scan{opacity:1;animation:spin 1.6s linear infinite}
-[data-state=busy] .track{stroke:rgba(244,185,66,.18)}
-@keyframes spin{to{transform:rotate(360deg)}}
-
-.face{
-  position:absolute;inset:9%;border-radius:50%;overflow:hidden;
-  background:radial-gradient(circle at 35% 30%,#173a43 0%,#0e2830 55%,#0b1f25 100%);
-  background-size:cover;background-position:center;
-  box-shadow:inset 0 0 0 1px var(--line),0 30px 60px -20px rgba(0,0,0,.6),inset 0 0 40px rgba(0,0,0,.35);
-}
-.face::after{content:"";position:absolute;inset:0;border-radius:50%;box-shadow:inset 0 0 0 14px rgba(243,239,230,.04)}
-.drop{
-  position:absolute;inset:0;z-index:2;display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px;
-  text-align:center;padding:18%;cursor:pointer;border-radius:50%;transition:background .25s;
-}
-[data-state=idle] .drop{display:flex}
-.drop:hover,.drop.over{background:rgba(244,185,66,.08)}
-.drop .ico{width:54px;height:54px;border-radius:50%;display:grid;place-items:center;background:var(--saffron);color:#201605;margin-bottom:6px;transition:transform .25s}
-.drop:hover .ico{transform:scale(1.07)}
-.drop strong{font-family:var(--serif);font-weight:500;font-size:1.25rem}
-.drop span{color:var(--mute);font-size:.85rem}
-.plate.over .track{stroke:var(--saffron)}
-[data-state=busy] .face img{filter:saturate(.7) brightness(.8)}
-
-/* result */
-.result{margin-top:28px}
-.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
-.chip{border:1px solid var(--line);background:none;border-radius:999px;padding:6px 14px;font-size:.85rem;color:var(--mute);transition:.2s}
-.chip[aria-pressed=true]{background:var(--ink);color:#0a1a1f;border-color:var(--ink);font-weight:600}
-.result h2{font-family:var(--serif);font-weight:500;font-size:2rem;letter-spacing:-.02em;text-transform:capitalize}
-.sub{color:var(--mute);font-size:.95rem}
-.sub b{color:var(--ink);font-weight:600}
-.cal{display:flex;align-items:baseline;gap:8px;margin:18px 0 26px}
-.cal #valCalories{font-family:var(--serif);font-weight:400;font-size:clamp(4rem,9vw,6rem);line-height:.9;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
-.cal small{color:var(--mute);font-size:1.1rem}
-.macros{list-style:none;display:grid;gap:18px}
-.macros li{display:grid;grid-template-columns:12px 1fr auto;gap:4px 12px;align-items:center}
-.dot{width:10px;height:10px;border-radius:50%}
-.macros b{font-weight:600;font-variant-numeric:tabular-nums}
-.macros b em{font-style:normal;color:var(--mute);font-weight:400;font-size:.85rem;margin-left:2px}
-.bar{grid-column:1/-1;height:4px;border-radius:4px;background:var(--line);overflow:hidden}
-.bar u{display:block;height:100%;width:0;border-radius:4px;transition:width 1s cubic-bezier(.2,.8,.2,1)}
-.btn{margin-top:32px;border:1px solid var(--line);background:rgba(243,239,230,.06);border-radius:14px;padding:13px 22px;font-weight:600;transition:.2s}
-.btn:hover{background:var(--ink);color:#0a1a1f}
-
-.err{display:none;margin-top:24px;border:1px solid rgba(239,106,76,.4);background:rgba(239,106,76,.08);border-radius:14px;padding:16px 18px}
-.err.show{display:block}
-.err p{color:#f5b4a5;font-size:.92rem;margin-bottom:12px}
-
-/* pipeline */
-.pipeline{border:1px solid var(--line);background:var(--card);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:26px;padding:26px 26px 14px;opacity:.55;transition:opacity .4s}
-[data-state=busy] .pipeline,[data-state=done] .pipeline{opacity:1}
-.ph{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:22px}
-.ph h3{font-family:var(--serif);font-weight:500;font-size:1.3rem}
-.ph span{color:var(--mute);font-size:.85rem;font-variant-numeric:tabular-nums}
-.steps{list-style:none}
-.step{position:relative;display:grid;grid-template-columns:28px 1fr;gap:0 16px;padding-bottom:22px}
-.step::before{content:"";position:absolute;left:13px;top:28px;bottom:-2px;width:2px;background:var(--line);transition:background .5s}
-.step:last-child::before{display:none}
-.step.done::before{background:var(--saffron)}
-.node{width:28px;height:28px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;background:var(--bg2);transition:.35s;position:relative;z-index:1}
-.node .sp,.node .ck{display:none}
-.step.active .node{border-color:var(--saffron)}
-.step.active .sp{display:block;width:12px;height:12px;border:2px solid rgba(244,185,66,.25);border-top-color:var(--saffron);border-radius:50%;animation:spin .8s linear infinite}
-.step.done .node{background:var(--saffron);border-color:var(--saffron);color:#201605}
-.step.done .ck{display:block}
-.st{font-weight:600;font-size:.98rem;color:var(--mute);transition:color .3s}
-.step.active .st,.step.done .st{color:var(--ink)}
-.model{font-size:.78rem;color:var(--mute);margin-left:8px;font-weight:400}
-.msg{font-size:.85rem;color:var(--mute);margin-top:2px}
-.step img{display:none;width:100%;height:auto;max-height:350px;object-fit:contain;border-radius:14px;margin-top:12px;border:1px solid var(--line);background:rgba(0,0,0,0.2)}
-.step img.show{display:block;animation:reveal .6s ease-out}
-.step pre{display:none;margin-top:10px;padding:12px;border-radius:12px;background:rgba(0,0,0,.28);color:var(--saffron);font-size:.78rem;overflow-x:auto;max-height:150px}
-.step pre.show{display:block}
-@keyframes reveal{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
-
-.json{grid-column:1/-1;display:none;border:1px solid var(--line);border-radius:18px;background:rgba(0,0,0,.3);padding:16px 18px}
-.json.show{display:block}
-.json header{display:flex;justify-content:space-between;color:var(--mute);font-size:.8rem;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
-.json pre{color:var(--herb);font-size:.78rem;overflow:auto;max-height:260px}
-
-html{-webkit-text-size-adjust:100%}
-body{-webkit-tap-highlight-color:transparent;overflow-x:hidden}
-.top,main{padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right))}
-.plate{scroll-margin-top:12px}
-.actions{display:none;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:28px}
-[data-state=idle] .actions{display:flex}
-.act{min-height:48px;border-radius:14px;padding:0 24px;font-weight:600;border:1px solid var(--line);background:rgba(243,239,230,.06);transition:.2s}
-.act:hover{background:rgba(243,239,230,.14)}
-.act.main{background:var(--saffron);border-color:var(--saffron);color:#201605}
-.act.main:hover{background:#f7c765}
-.live{margin:24px auto 0;max-width:380px;text-align:center}
-.live p{font-size:.95rem;min-height:1.5em}
-.lbar{height:4px;border-radius:4px;background:var(--line);margin-top:12px;overflow:hidden}
-.lbar u{display:block;height:100%;width:4%;background:var(--saffron);border-radius:4px;transition:width .6s ease}
-@media(min-width:980px){[data-state=busy] .live{display:none}}
-.btn,.json-btn{min-height:44px}
-.chip{min-height:40px}
-.foot{max-width:1180px;margin:0 auto;padding:0 24px 40px;color:var(--mute);font-size:.8rem;text-align:center;line-height:1.6}
-@media(max-width:600px){
-  main{gap:32px;padding-bottom:40px}
-  .plate-wrap{margin:28px 0 4px}
-  .drop{padding:14%}.drop strong{font-size:1.1rem}
-  .pipeline{padding:20px 18px 6px;border-radius:22px}
-  .result h2{font-size:1.7rem}
-  .btn{width:100%}
-}
-@media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+:root{color-scheme:dark;--bg:#0b1b20;--panel:#10272e;--panel2:#14323a;--ink:#f5f2e9;--muted:#a1b3b5;--line:#29434a;--gold:#f4bd50;--green:#9bd59a;--coral:#ff866b;--max:1160px;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:88px}body{margin:0;background:radial-gradient(ellipse at 8% 0%,#213a31 0,transparent 32rem),radial-gradient(ellipse at 100% 8%,#143d48 0,transparent 34rem),var(--bg);color:var(--ink);line-height:1.6}a{color:inherit}button,input{font:inherit}button,a{touch-action:manipulation}button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-offset:3px}.wrap{width:min(calc(100% - 40px),var(--max));margin-inline:auto}.skip{position:absolute;left:-9999px;top:0}.skip:focus{left:1rem;top:1rem;z-index:20;background:var(--ink);color:var(--bg);padding:.7rem}.nav{position:sticky;top:0;z-index:10;border-bottom:1px solid #29434acc;background:#0b1b20ed;backdrop-filter:blur(16px)}.nav-inner{min-height:76px;display:flex;align-items:center;justify-content:space-between;gap:1.5rem}.brand{display:flex;align-items:center;gap:.7rem;text-decoration:none;font-weight:750;letter-spacing:-.04em;font-size:1.15rem}.mark{width:30px;height:30px;border:2px solid #8aa7a6;border-radius:50%;display:grid;place-items:center}.mark:after{content:"";width:13px;height:13px;border-radius:50%;background:var(--gold)}.nav-links{display:flex;gap:1.35rem;align-items:center}.nav-links a{text-decoration:none;color:var(--muted);font-size:.9rem}.nav-links a:hover{color:var(--ink)}.button{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:.72rem 1.05rem;border:1px solid var(--line);border-radius:12px;text-decoration:none;font-weight:700;background:#ffffff08;color:var(--ink);cursor:pointer}.button:hover{background:#ffffff14}.button.primary{background:var(--gold);color:#1e1b12;border-color:var(--gold)}.button.primary:hover{background:#ffd578}.hero{padding:86px 0 72px}.eyebrow{display:inline-flex;align-items:center;gap:.55rem;color:var(--green);font-size:.78rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.eyebrow:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green)}h1,h2,h3,p{margin-top:0}h1{font-size:clamp(2.8rem,7vw,5.7rem);line-height:.99;letter-spacing:-.065em;max-width:900px;margin:1.2rem 0 1.35rem;font-weight:760}h1 span{color:var(--gold)}.lead{font-size:clamp(1.05rem,2vw,1.25rem);color:var(--muted);max-width:700px}.hero-actions{display:flex;flex-wrap:wrap;gap:.8rem;margin:2rem 0}.note{font-size:.84rem;color:var(--muted);max-width:720px}.trust-row{display:flex;flex-wrap:wrap;gap:.65rem;margin-top:2.4rem}.pill{border:1px solid var(--line);border-radius:999px;padding:.45rem .75rem;color:#d1ddda;font-size:.8rem}.section{padding:68px 0;border-top:1px solid #29434a88}.section-head{display:flex;justify-content:space-between;align-items:end;gap:2rem;margin-bottom:2rem}.section-head h2{font-size:clamp(2rem,4vw,3.2rem);letter-spacing:-.05em;line-height:1.05;margin:.6rem 0}.section-head p{max-width:550px;color:var(--muted);margin:0}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem}.card{border:1px solid var(--line);background:linear-gradient(155deg,#143039e8,#10252bd9);border-radius:20px;padding:1.4rem;min-width:0}.card .num{color:var(--gold);font-size:.8rem;font-weight:800;letter-spacing:.1em}.card h3{font-size:1.2rem;margin:.8rem 0 .45rem}.card p{color:var(--muted);font-size:.94rem;margin:0}.callout{border:1px solid #856e3a;background:#f4bd5010;border-radius:16px;padding:1rem 1.2rem;color:#e8dfc8}.callout strong{color:var(--gold)}.api-layout{display:grid;grid-template-columns:1fr 1fr;gap:1rem;align-items:stretch}.code{white-space:pre-wrap;overflow-wrap:anywhere;background:#061114;border:1px solid var(--line);border-radius:16px;padding:1.2rem;color:#c3e6ce;font: .87rem/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;overflow:auto}.checklist{list-style:none;padding:0;margin:0;display:grid;gap:.8rem}.checklist li{display:grid;grid-template-columns:1.4rem 1fr;gap:.7rem;color:var(--muted)}.checklist li:before{content:"•";color:var(--gold);font-size:1.4rem;line-height:1.2}.status{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;padding:.18rem .55rem;font-size:.72rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#e6d8ad}.status.live{color:var(--green)}.status.planned{color:#e6d8ad}.status.external{color:#a9d9ed}.demo{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1.2rem;align-items:start}.upload-box{border:1px dashed #567077;background:#ffffff05;border-radius:20px;padding:1.5rem}.upload-box h3{margin:.2rem 0 .5rem}.upload-box p{color:var(--muted);font-size:.9rem}.file-actions{display:flex;flex-wrap:wrap;gap:.7rem;margin:1rem 0}.file-actions input{max-width:100%;color:var(--muted)}.preview{width:100%;max-height:340px;object-fit:contain;border-radius:14px;background:#061114;display:none;margin-top:1rem}.progress{height:5px;border-radius:5px;background:#29434a;overflow:hidden;margin:1rem 0}.progress span{display:block;width:0;height:100%;background:var(--gold);transition:width .2s}.steps{display:grid;gap:.65rem}.step{display:grid;grid-template-columns:2rem 1fr;gap:.8rem;padding:.8rem;border:1px solid var(--line);border-radius:13px;background:#ffffff03}.step .icon{width:2rem;height:2rem;border-radius:50%;display:grid;place-items:center;background:#203a40;color:var(--muted);font-weight:800}.step[data-status=done] .icon{background:var(--green);color:#112317}.step[data-status=running] .icon{background:var(--gold);color:#201b10}.step strong{display:block;font-size:.92rem}.step small{display:block;color:var(--muted)}.result{display:none;margin-top:1rem;border:1px solid var(--line);border-radius:18px;padding:1.2rem;background:#0a1a1e}.result.show{display:block}.result-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem;margin:1rem 0}.metric{background:#ffffff06;border-radius:12px;padding:.8rem}.metric small{display:block;color:var(--muted)}.metric strong{font-size:1.35rem;overflow-wrap:anywhere}.message{min-height:1.5rem;color:var(--muted);font-size:.9rem}.error{color:#ffb8a8}.fatsecret{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;border:1px solid var(--line);border-radius:16px;padding:1rem 1.2rem;margin-top:1rem}.fatsecret p{margin:0;color:var(--muted);font-size:.86rem}.fatsecret a{color:var(--ink)}.footer{padding:40px 0 55px;border-top:1px solid var(--line);color:var(--muted);font-size:.82rem}.footer-inner{display:flex;justify-content:space-between;gap:2rem;flex-wrap:wrap}.footer a{color:var(--ink)}.fineprint{max-width:850px;margin-top:1.3rem}.hidden{display:none!important}
+@media(max-width:800px){.nav-links a:not(.button){display:none}.hero{padding:58px 0}.section{padding:52px 0}.grid{grid-template-columns:1fr}.api-layout,.demo{grid-template-columns:1fr}.section-head{display:block}.section-head p{margin-top:1rem}.wrap{width:min(calc(100% - 28px),var(--max))}.nav-inner{min-height:66px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
 </head>
 <body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="nav"><div class="wrap nav-inner">
+<a class="brand" href="#" aria-label="ActualPlate home"><span class="mark" aria-hidden="true"></span>ActualPlate</a>
+<nav class="nav-links" aria-label="Main navigation"><a href="#platform">Platform</a><a href="#integration">Integration</a><a href="#trust">Trust & limits</a><a href="#demo" class="button primary">Try the demo</a></nav>
+</div></header>
+<main id="main">
+<section class="hero"><div class="wrap">
+<div class="eyebrow">Food analysis infrastructure</div>
+<h1>Turn a meal photo into <span>structured food data.</span></h1>
+<p class="lead">ActualPlate is building a single-image food analysis pipeline for product teams working in nutrition, food technology, hospitality, and wellness. Explore the workflow, review the integration surface, and see what is—and is not—production-ready.</p>
+<div class="hero-actions"><a class="button primary" href="#demo">Explore the live workflow</a><a class="button" href="#integration">Review API integration</a></div>
+<p class="note">Early-stage platform. Portion mass and nutrition estimates depend on the current vision pipeline and should not be treated as verified measurements or medical advice. Enterprise authentication, customer accounts, billing, and service-level commitments are not yet advertised as available.</p>
+<div class="trust-row"><span class="pill">Single RGB image workflow</span><span class="pill">Python backend</span><span class="pill">FatSecret nutrition lookup</span><span class="pill">B2B readiness in progress</span></div>
+</div></section>
+<section class="section" id="platform"><div class="wrap">
+<div class="section-head"><div><div class="eyebrow">Platform workflow</div><h2>One pipeline.<br>Inspectable steps.</h2></div><p>The demo exposes the current analysis path, from food recognition through geometry and nutrition lookup. Each stage is useful for debugging; none should be mistaken for a guarantee of physical accuracy.</p></div>
+<div class="grid">
+<article class="card"><span class="num">01 / IDENTIFY</span><h3>Recognize and locate</h3><p>Food recognition proposes labels; object detection locates candidate regions and segmentation extracts food masks.</p></article>
+<article class="card"><span class="num">02 / ESTIMATE</span><h3>Geometry with limits</h3><p>Monocular depth can provide relative geometric cues. Absolute metric scale from one image remains a separate, unresolved validation problem.</p></article>
+<article class="card"><span class="num">03 / ENRICH</span><h3>Nutrition lookup</h3><p>Recognized foods can be matched to FatSecret records, then scaled only when a usable mass estimate is available. Missing values must remain missing.</p></article>
+</div>
+<div class="callout" style="margin-top:1rem"><strong>Scientific honesty:</strong> ActualPlate does not currently claim a validated ≤5% absolute-volume error rate. When metric scale or mass is unavailable, the product must report that limitation rather than invent a number.</div>
+</div></section>
+<section class="section" id="integration"><div class="wrap">
+<div class="section-head"><div><div class="eyebrow">For product & engineering teams</div><h2>Designed for integration.<br>Not yet a finished SaaS.</h2></div><p>Use this as the current integration overview. Production credentials, tenant isolation, API-key management, quotas, billing, and published SLAs remain roadmap work until verified and released.</p></div>
+<div class="api-layout">
+<div class="card"><span class="status live">Current surface</span><h3>Image analysis endpoint</h3><p>The web demo sends an image as multipart form data to the streaming analysis endpoint. A stable public API contract, versioned routes, and external customer authentication are still being built.</p><pre class="code">POST /upload-image-stream
+Content-Type: multipart/form-data
 
-<header class="top">
-  <div class="brand">
-    <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><circle cx="16" cy="16" r="14" stroke="#f3efe6" stroke-opacity=".35" stroke-width="2"/><circle cx="16" cy="16" r="8.5" fill="#f4b942"/></svg>
-    ActualPlate
-  </div>
-  <button class="json-btn" id="debugToggle" aria-pressed="false">API JSON</button>
-</header>
+file: &lt;image bytes&gt;
 
-<main id="stage" data-state="idle">
-
-  <section>
-    <div class="v v-idle">
-      <h1>Know what’s actually on your plate.</h1>
-      <p class="lede">Photograph a meal. We measure the portion in 3D and return calories and macros in seconds.</p>
-    </div>
-    <div class="v v-busy">
-      <h1>Reading your plate.</h1>
-      <p class="lede">Identifying the food, measuring its size, and looking up nutrition. This takes a few seconds.</p>
-    </div>
-
-    <div class="plate-wrap">
-      <div class="plate" id="plate">
-        <svg viewBox="0 0 100 100" aria-hidden="true">
-          <circle class="track" cx="50" cy="50" r="46" pathLength="100"/>
-          <circle class="arc" id="arcP" cx="50" cy="50" r="46" pathLength="100" stroke="#8fd18b"/>
-          <circle class="arc" id="arcC" cx="50" cy="50" r="46" pathLength="100" stroke="#f4b942"/>
-          <circle class="arc" id="arcF" cx="50" cy="50" r="46" pathLength="100" stroke="#ef6a4c"/>
-          <circle class="scan" cx="50" cy="50" r="46" pathLength="100"/>
-        </svg>
-        <div class="face" id="face">
-          <label class="drop" id="drop" for="galleryInput">
-            <span class="ico"><svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 9a2 2 0 012-2h.9a2 2 0 001.7-.9l.8-1.2A2 2 0 0110.1 4h3.8a2 2 0 011.7.9l.8 1.2a2 2 0 001.7.9H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3.2"/></svg></span>
-            <strong>Add a meal photo</strong>
-            <span>Take one, or drop an image here</span>
-          </label>
-        </div>
-      </div>
-      <input type="file" id="fileInput" hidden accept="image/*" capture="environment">
-      <input type="file" id="galleryInput" hidden accept="image/*">
-    </div>
-
-    <div class="actions">
-      <button class="act main" id="camBtn" onclick="document.getElementById('fileInput').click()">Take a photo</button>
-      <button class="act" onclick="document.getElementById('galleryInput').click()">Choose a photo</button>
-    </div>
-
-    <div class="live v v-busy" aria-live="polite"><p id="liveMsg">Uploading your photo…</p><div class="lbar"><u id="liveBar"></u></div></div>
-
-    <div class="err" id="err" role="alert">
-      <p id="errMsg">Something went wrong.</p>
-      <button class="btn" style="margin:0" onclick="resetUI()">Try another photo</button>
-    </div>
-
-    <div class="result v v-done" id="result">
-      <div class="chips" id="chips"></div>
-      <h2 id="foodName">Banana</h2>
-      <p class="sub">About <b id="foodMass">0 g</b> on the plate</p>
-      <div class="cal"><span id="valCalories">0</span><small>kcal</small></div>
-      <ul class="macros">
-        <li><i class="dot" style="background:var(--herb)"></i><span>Protein</span><b id="valProtein">0</b><div class="bar"><u id="barP" style="background:var(--herb)"></u></div></li>
-        <li><i class="dot" style="background:var(--saffron)"></i><span>Carbohydrates</span><b id="valCarbs">0</b><div class="bar"><u id="barC" style="background:var(--saffron)"></u></div></li>
-        <li><i class="dot" style="background:var(--chili)"></i><span>Fat</span><b id="valFat">0</b><div class="bar"><u id="barF" style="background:var(--chili)"></u></div></li>
-      </ul>
-      <button class="btn" onclick="resetUI()">Scan another meal</button>
-    </div>
-  </section>
-
-  <aside class="pipeline" id="pipelineContainer" aria-live="polite">
-    <div class="ph"><h3>Analysis</h3><span id="progress">0 of 6 complete</span></div>
-    <ol class="steps">
-      <li class="step" id="step-gemma"><div class="node"><i class="sp"></i><svg class="ck" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></div>
-        <div><div class="st">Recognize food<span class="model">Gemma</span></div><p class="msg" id="msg-gemma">Waiting to start</p><pre id="data-gemma"></pre></div></li>
-      <li class="step" id="step-dino"><div class="node"><i class="sp"></i><svg class="ck" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></div>
-        <div><div class="st">Locate each item<span class="model">Grounding DINO</span></div><p class="msg" id="msg-dino">Waiting</p><img id="img-dino" alt="Detected food regions"></div></li>
-      <li class="step" id="step-sam2"><div class="node"><i class="sp"></i><svg class="ck" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></div>
-        <div><div class="st">Cut out the food<span class="model">SAM2</span></div><p class="msg" id="msg-sam2">Waiting</p><img id="img-sam2" alt="Segmented food"></div></li>
-      <li class="step" id="step-depth"><div class="node"><i class="sp"></i><svg class="ck" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></div>
-        <div><div class="st">Measure depth<span class="model">MoGe-2</span></div><p class="msg" id="msg-depth">Waiting</p><img id="img-depth" alt="Depth map"></div></li>
-      <li class="step" id="step-volume"><div class="node"><i class="sp"></i><svg class="ck" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></div>
-        <div><div class="st">Calculate portion size</div><p class="msg" id="msg-volume">Waiting</p></div></li>
-      <li class="step" id="step-nutrition"><div class="node"><i class="sp"></i><svg class="ck" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></div>
-        <div><div class="st">Look up nutrition<span class="model">FatSecret</span></div><p class="msg" id="msg-nutrition">Waiting</p></div></li>
-    </ol>
-  </aside>
-
-  <section class="json" id="jsonContainer">
-    <header><span>API response</span><span id="statusCode">Idle</span></header>
-    <pre id="jsonOutput">// Waiting for a scan</pre>
-  </section>
+Response: Server-Sent Events
+event data: pipeline progress
+event data: final analysis payload</pre></div>
+<div class="card"><span class="status planned">Platform roadmap</span><h3>Enterprise capabilities</h3><ul class="checklist"><li>Organization-scoped API keys, scopes, rotation, and revocation</li><li>JWT login for the developer portal; role-based access control</li><li>Usage metering, atomic plan limits, and shared rate limiting</li><li>Versioned API schemas, predictable errors, and request IDs</li><li>Operational health, observability, and deployment checks</li><li>SDKs, Postman collection, webhooks, and billing after the foundation</li></ul></div>
+</div>
+</div></section>
+<section class="section" id="trust"><div class="wrap">
+<div class="section-head"><div><div class="eyebrow">Trust & operational boundaries</div><h2>Clear about what is ready.</h2></div><p>Enterprise readiness is a set of verified controls—not a visual design or a checklist marked complete before implementation.</p></div>
+<div class="grid">
+<article class="card"><span class="status live">In progress</span><h3>Request safety</h3><p>Backend work is tightening upload validation, request-size limits, CORS policy, and safe public errors. Production deployment still needs environment-specific verification.</p></article>
+<article class="card"><span class="status planned">Not released</span><h3>Identity & tenant isolation</h3><p>Database-backed users, organizations, API keys, RBAC, audit logs, and customer usage records are planned foundational work—not features customers can rely on yet.</p></article>
+<article class="card"><span class="status planned">Validation gate</span><h3>Metric accuracy</h3><p>Model evaluation against independently measured ground truth, uncertainty reporting, and drift monitoring must precede any accuracy guarantee.</p></article>
+</div>
+</div></section>
+<section class="section" id="demo"><div class="wrap">
+<div class="section-head"><div><div class="eyebrow">Interactive demo</div><h2>Try a meal image.</h2></div><p>This sends the selected image to the configured ActualPlate API. Do not upload private, identifying, or sensitive images. The demo is not a medical or dietary advice service.</p></div>
+<div class="demo">
+<div class="upload-box"><h3>Choose a meal photo</h3><p>JPEG, PNG, or another browser-supported image. Keep the file under 10 MB. Server-side limits also apply.</p>
+<div class="file-actions"><input id="mealFile" type="file" accept="image/*" aria-label="Choose meal image"><button id="analyzeBtn" class="button primary" type="button">Analyze image</button><button id="clearBtn" class="button" type="button">Clear</button></div>
+<img id="preview" class="preview" alt="Selected meal preview">
+<div id="progressText" class="message" aria-live="polite">Ready when you are.</div><div class="progress" aria-hidden="true"><span id="progressBar"></span></div><div id="demoError" class="message error" role="alert"></div>
+<div class="fatsecret"><p>Nutrition information is provided by FatSecret where returned by the pipeline.</p><a href="https://platform.fatsecret.com">Powered by fatsecret Platform API</a></div>
+</div>
+<div><div class="steps" id="pipelineSteps" aria-label="Analysis progress">
+<div class="step" data-step="gemma" data-status="waiting"><span class="icon">1</span><div><strong>Recognize food</strong><small>Waiting to start</small></div></div>
+<div class="step" data-step="dino" data-status="waiting"><span class="icon">2</span><div><strong>Locate food regions</strong><small>Waiting</small></div></div>
+<div class="step" data-step="sam2" data-status="waiting"><span class="icon">3</span><div><strong>Segment food</strong><small>Waiting</small></div></div>
+<div class="step" data-step="depth" data-status="waiting"><span class="icon">4</span><div><strong>Estimate depth cues</strong><small>Waiting</small></div></div>
+<div class="step" data-step="volume" data-status="waiting"><span class="icon">5</span><div><strong>Evaluate portion geometry</strong><small>Waiting</small></div></div>
+<div class="step" data-step="nutrition" data-status="waiting"><span class="icon">6</span><div><strong>Retrieve nutrition</strong><small>Waiting</small></div></div>
+</div>
+<div id="demoResult" class="result" aria-live="polite"><h3 id="resultTitle">Analysis result</h3><div class="result-grid"><div class="metric"><small>Estimated mass</small><strong id="massValue">Not available</strong></div><div class="metric"><small>Calories</small><strong id="calorieValue">Not available</strong></div><div class="metric"><small>Protein</small><strong id="proteinValue">Not available</strong></div><div class="metric"><small>Carbohydrates</small><strong id="carbValue">Not available</strong></div><div class="metric"><small>Fat</small><strong id="fatValue">Not available</strong></div><div class="metric"><small>Detected items</small><strong id="foodCount">0</strong></div></div><p class="note">Values are shown only when the API returns valid numbers. They are estimates, not laboratory measurements. Nutrition details are attributed to FatSecret where provided.</p><p><a href="https://platform.fatsecret.com">Powered by fatsecret Platform API</a></p><details><summary>Inspect raw API response</summary><pre id="rawResult" class="code">No response yet.</pre></details></div>
+</div>
+</div>
+</div></section>
 </main>
-
-<footer class="foot">Estimates from a single photo, so treat them as a close guide, not a lab measurement.<br>Built with Gemma, Grounding DINO, SAM2, MoGe-2 and FatSecret.</footer>
-
+<footer class="footer"><div class="wrap">
+<div class="footer-inner"><a class="brand" href="#"><span class="mark" aria-hidden="true"></span>ActualPlate</a><div><a href="https://github.com/Krishna7dx9/ActualPlate">Engineering repository</a> · <a href="https://platform.fatsecret.com/terms">FatSecret Platform API Terms</a> · <a href="https://platform.fatsecret.com/attribution">Attribution policy</a></div></div>
+<p class="fineprint">ActualPlate is an independent project and is not represented as sponsored or endorsed by FatSecret. Nutrition data is supplied by the FatSecret Platform API where available; required attribution and applicable platform terms must be followed. Food analysis and nutrition values are estimates and are not a substitute for medical advice. Website copy describes current development status; it does not promise uptime, accuracy, security certification, or commercial availability.</p>
+</div></footer>
 <script>
-const API_URL = "https://api.actualplate.tech/upload-image-stream";
-const STEPS = ['gemma','dino','sam2','depth','volume','nutrition'];
+const API_BASE_URL = "{{API_BASE_URL}}";
+const API_URL = API_BASE_URL.replace(/\/$/, "") + "/upload-image-stream";
 const $ = id => document.getElementById(id);
-const num = v => Number(v) || 0;
-let foods = [], doneSet = new Set(), photoURL = null, raf = null;
-
-const setState = s => $('stage').dataset.state = s;
-
-/* raw data toggle */
-$('debugToggle').addEventListener('click', e => {
-  const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
-  e.currentTarget.setAttribute('aria-pressed', on);
-  $('jsonContainer').classList.toggle('show', on);
+const stageNames = {gemma:"Recognize food",dino:"Locate food regions",sam2:"Segment food",depth:"Estimate depth cues",volume:"Evaluate portion geometry",nutrition:"Retrieve nutrition"};
+let selectedFile = null, previewUrl = null, activeController = null;
+const maxFileBytes = 10 * 1024 * 1024;
+function setMessage(message, isError=false){$("progressText").textContent=message;$("demoError").textContent=isError?message:"";}
+function resetSteps(){document.querySelectorAll("[data-step]").forEach(el=>{el.dataset.status="waiting";el.querySelector("small").textContent=el.dataset.step==="gemma"?"Waiting to start":"Waiting";});$("progressBar").style.width="0%";}
+function showValue(id,value,suffix=""){const valid=typeof value==="number"&&Number.isFinite(value);$(id).textContent=valid?String(Math.round(value*100)/100)+suffix:"Not available";}
+function setStep(data){
+ if(data.step==="error"){throw new Error(typeof data.message==="string"?data.message:"Analysis failed");}
+ const el=document.querySelector('[data-step="'+data.step+'"]');
+ if(el){el.dataset.status=data.status==="done"?"done":data.status==="running"?"running":"waiting";el.querySelector("small").textContent=data.message||stageNames[data.step]||"Processing";}
+ const finished=document.querySelectorAll('[data-step][data-status="done"]').length;
+ $("progressBar").style.width=Math.min(100,Math.round((finished/6)*100))+"%";
+ if(data.message)setMessage(data.message);
+ if(data.final)renderResult(data.final);
+}
+function renderResult(payload){
+ $("rawResult").textContent=JSON.stringify(payload,null,2);
+ const foods=Array.isArray(payload.foods)?payload.foods:[];
+ $("foodCount").textContent=String(foods.length);
+ const nutritionStatus=payload.nutrition_status;
+ const hasUsableNutrition=foods.length>0&&["complete","partial"].includes(nutritionStatus);
+ const total=hasUsableNutrition&&payload.total_nutrition&&typeof payload.total_nutrition==="object"?payload.total_nutrition:null;
+ const mass=foods.reduce((sum,f)=>sum+(typeof f.mass_g==="number"&&Number.isFinite(f.mass_g)?f.mass_g:0),0);
+ showValue("massValue",foods.some(f=>typeof f.mass_g==="number"&&Number.isFinite(f.mass_g))?mass:null," g");
+ showValue("calorieValue",total&&total.calories);
+ showValue("proteinValue",total&&total.protein," g");
+ showValue("carbValue",total&&total.carbohydrate," g");
+ showValue("fatValue",total&&total.fat," g");
+ $("resultTitle").textContent=!foods.length?"No food detected — nutrition unavailable":nutritionStatus==="partial"?"Analysis complete — partial nutrition data":nutritionStatus==="complete"?"Analysis complete":"Analysis complete — nutrition unavailable";
+ $("demoResult").classList.add("show");
+ if(!foods.length)setMessage("The pipeline returned no nutrition records. No values have been invented.");
+ else setMessage("Analysis finished. Treat all estimates as provisional.");
+}
+async function consumeSSE(response,signal){
+ if(!response.body)throw new Error("This browser does not support streaming responses.");
+ const reader=response.body.getReader(),decoder=new TextDecoder();let buffer="",sawFinal=false;
+ try{
+  while(true){
+   if(signal.aborted)throw new DOMException("Request cancelled","AbortError");
+   const {done,value}=await reader.read();if(done)break;
+   buffer+=decoder.decode(value,{stream:true});
+   const events=buffer.split(/\r?\n\r?\n/);buffer=events.pop();
+   for(const event of events){const line=event.split(/\r?\n/).find(x=>x.startsWith("data:"));if(!line)continue;const parsed=JSON.parse(line.slice(5).trim());if(parsed.step==="complete"&&!parsed.final){parsed.final={foods:[],total_nutrition:null,nutrition_status:parsed.nutrition_status||"not_available"};sawFinal=true;}setStep(parsed);if(parsed.final)sawFinal=true;}
+  }
+  buffer+=decoder.decode();
+  if(buffer.trim()){const line=buffer.split(/\r?\n/).find(x=>x.startsWith("data:"));if(line){const parsed=JSON.parse(line.slice(5).trim());if(parsed.step==="complete"&&!parsed.final){parsed.final={foods:[],total_nutrition:null,nutrition_status:parsed.nutrition_status||"not_available"};sawFinal=true;}setStep(parsed);if(parsed.final)sawFinal=true;}}
+ }finally{reader.releaseLock();}
+ if(!sawFinal)throw new Error("The stream ended before a final result was received.");
+}
+$("mealFile").addEventListener("change",()=>{
+ const file=$("mealFile").files&&$("mealFile").files[0];selectedFile=file||null;
+ if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=null;}
+ $("preview").style.display="none";
+ if(!selectedFile){setMessage("Ready when you are.");return;}
+ if(!selectedFile.type.startsWith("image/")){selectedFile=null;setMessage("Choose a supported image file.",true);return;}
+ if(selectedFile.size>maxFileBytes){selectedFile=null;setMessage("The selected file exceeds the demo's 10 MB client-side limit.",true);return;}
+ previewUrl=URL.createObjectURL(selectedFile);$("preview").src=previewUrl;$("preview").style.display="block";setMessage("Image selected. The server will validate it again.");
 });
-
-/* upload: click, camera, drag and drop */
-['fileInput','galleryInput'].forEach(id => $(id).addEventListener('change', e => handleUpload(e.target.files[0])));
-['dragenter','dragover'].forEach(t => $('plate').addEventListener(t, e => { if ($('stage').dataset.state !== 'idle') return; e.preventDefault(); $('drop').classList.add('over'); $('plate').classList.add('over'); }));
-['dragleave','drop'].forEach(t => $('plate').addEventListener(t, e => { e.preventDefault(); $('drop').classList.remove('over'); $('plate').classList.remove('over'); }));
-$('plate').addEventListener('drop', e => { if ($('stage').dataset.state !== 'idle') return; const f = e.dataTransfer.files[0]; if (f && f.type.startsWith('image/')) handleUpload(f); });
-
-function resetUI() {
-  setState('idle');
-  $('err').classList.remove('show');
-  doneSet.clear(); foods = [];
-  $('progress').textContent = '0 of 6 complete';
-  STEPS.forEach(s => {
-    $('step-' + s).className = 'step';
-    $('msg-' + s).textContent = s === 'gemma' ? 'Waiting to start' : 'Waiting';
-    const img = $('img-' + s); if (img) { img.classList.remove('show'); img.removeAttribute('src'); }
-    const pre = $('data-' + s); if (pre) { pre.classList.remove('show'); pre.textContent = ''; }
-  });
-  ['arcP','arcC','arcF'].forEach(id => $(id).style.strokeDasharray = '0 100');
-  ['barP','barC','barF'].forEach(id => $(id).style.width = '0');
-  $('face').style.backgroundImage = '';
-  const old = $('face').querySelector('img'); if (old) old.remove();
-  if (photoURL) { URL.revokeObjectURL(photoURL); photoURL = null; }
-  $('fileInput').value = ''; $('galleryInput').value = '';
-  $('liveMsg').textContent = 'Uploading your photo…'; $('liveBar').style.width = '4%';
-  $('statusCode').textContent = 'Idle';
-  $('jsonOutput').textContent = '// Waiting for a scan';
-}
-
-async function handleUpload(file) {
-  if (!file) return;
-  photoURL = URL.createObjectURL(file);
-  const img = document.createElement('img');
-  img.src = photoURL; img.alt = 'Your meal';
-  img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:filter .6s';
-  $('face').prepend(img);
-  setState('busy');
-  $('err').classList.remove('show');
-  $('jsonOutput').textContent = '// Connecting to backend...';
-  $('statusCode').textContent = 'POST';
-
-  const formData = new FormData();
-  formData.append('file', file);
-
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 150000);
-    const response = await fetch(API_URL, { method: 'POST', body: formData, signal: ctrl.signal });
-    if (!response.ok) throw new Error('Server error ' + response.status);
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split(/\r?\n\r?\n/);
-      buffer = lines.pop();
-      for (const line of lines) {
-        if (line.startsWith('data: ')) updateStep(JSON.parse(line.substring(6)));
-      }
-    }
-    clearTimeout(timer);
-    if (buffer.startsWith('data: ')) { try { updateStep(JSON.parse(buffer.substring(6))); } catch (_) {} }
-    $('statusCode').textContent = '200 OK';
-    if ($('stage').dataset.state === 'busy') throw new Error('The analysis finished without a result.');
-  } catch (error) {
-    $('jsonOutput').textContent = 'Error: ' + error.message;
-    $('statusCode').textContent = 'Failed';
-    $('errMsg').textContent = 'We couldn’t analyze that photo. Check your connection and try again. (' + (error.name === 'AbortError' ? 'The request timed out' : error.message) + ')';
-    $('err').classList.add('show');
-    setState('error');
-  }
-}
-
-function updateStep(data) {
-  if (data.step === 'error') {
-    $('jsonOutput').textContent = 'Error: ' + data.message;
-    $('errMsg').textContent = data.message || 'The analysis failed.';
-    $('err').classList.add('show');
-    setState('error');
-    return;
-  }
-  const id = data.step, card = $('step-' + id);
-  if (card) {
-    if (data.status === 'running') card.classList.add('active');
-    else if (data.status === 'done') {
-      card.classList.remove('active'); card.classList.add('done');
-      doneSet.add(id);
-      $('progress').textContent = doneSet.size + ' of 6 complete';
-    }
-    $('msg-' + id).textContent = data.message;
-    if (data.message) $('liveMsg').textContent = data.message;
-    $('liveBar').style.width = Math.max(4, (doneSet.size + (data.status === 'running' ? .4 : 0)) / 6 * 100) + '%';
-  }
-  if (data.image) {
-    const img = $('img-' + id);
-    if (img) { img.src = 'data:image/png;base64,' + data.image; img.classList.add('show'); }
-  }
-  if (data.data && id === 'gemma') {
-    const pre = $('data-gemma');
-    pre.textContent = JSON.stringify(data.data, null, 2);
-    pre.classList.add('show');
-  }
-  if (data.final) {
-    $('jsonOutput').textContent = JSON.stringify(data.final, null, 2);
-    if (data.final.foods && data.final.foods.length) {
-      foods = data.final.foods;
-      buildChips();
-      setState('done');
-      
-      if (foods.length > 1) {
-        showTotal();
-      } else {
-        showFood(0);
-      }
-      
-      if (innerWidth < 980) setTimeout(() => $('plate').scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
-    }
-  }
-}
-
-function buildChips() {
-  const box = $('chips');
-  box.innerHTML = '';
-  if (foods.length < 2) return;
-
-  // Add Total Plate chip
-  const totalBtn = document.createElement('button');
-  totalBtn.className = 'chip'; totalBtn.textContent = 'Total Plate';
-  totalBtn.setAttribute('aria-pressed', 'true'); // Default to true
-  totalBtn.onclick = () => { 
-      [...box.children].forEach(c => c.setAttribute('aria-pressed', false)); 
-      totalBtn.setAttribute('aria-pressed', 'true'); 
-      showTotal(); 
-  };
-  box.appendChild(totalBtn);
-
-  // Add individual food chips
-  foods.forEach((f, i) => {
-    const b = document.createElement('button');
-    b.className = 'chip'; b.textContent = f.food_name;
-    b.setAttribute('aria-pressed', 'false');
-    b.onclick = () => { 
-        [...box.children].forEach(c => c.setAttribute('aria-pressed', false)); 
-        b.setAttribute('aria-pressed', 'true'); 
-        showFood(i); 
-    };
-    box.appendChild(b);
-  });
-}
-
-function showTotal() {
-  let totalCal = 0, totalP = 0, totalC = 0, totalF = 0, totalMass = 0;
-  
-  foods.forEach(f => {
-    const n = f.nutrition || {};
-    totalCal += num(n.calories);
-    totalP += num(n.protein);
-    totalC += num(n.carbohydrate);
-    totalF += num(n.fat);
-    totalMass += num(f.mass_g);
-  });
-
-  $('foodName').textContent = "Total Plate";
-  $('foodMass').textContent = totalMass.toFixed(0) + ' g';
-  $('valProtein').innerHTML = totalP.toFixed(1) + '<em>g</em>';
-  $('valCarbs').innerHTML = totalC.toFixed(1) + '<em>g</em>';
-  $('valFat').innerHTML = totalF.toFixed(1) + '<em>g</em>';
-
-  // animate calories
-  cancelAnimationFrame(raf);
-  const t0 = performance.now(), dur = 900;
-  const tick = t => {
-    const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
-    $('valCalories').textContent = Math.round(totalCal * e);
-    if (k < 1) raf = requestAnimationFrame(tick);
-  };
-  raf = requestAnimationFrame(tick);
-
-  // macro ring
-  const kp = totalP * 4, kc = totalC * 4, kf = totalF * 9, totalCalMacros = (kp + kc + kf) || 1;
-  let cum = 0;
-  [['arcP', kp], ['arcC', kc], ['arcF', kf]].forEach(([id, k]) => {
-    const share = k / totalCalMacros * 100, len = Math.max(0, share - (share > 2 ? 1.6 : 0));
-    const el = $(id);
-    el.style.strokeDashoffset = -cum;
-    requestAnimationFrame(() => el.style.strokeDasharray = len.toFixed(2) + ' ' + (100 - len).toFixed(2));
-    cum += share;
-  });
-
-  // bars scaled to the largest macro by weight
-  const max = Math.max(totalP, totalC, totalF) || 1;
-  $('barP').style.width = (totalP / max * 100) + '%';
-  $('barC').style.width = (totalC / max * 100) + '%';
-  $('barF').style.width = (totalF / max * 100) + '%';
-}
-
-function showFood(i) {
-  const f = foods[i], n = f.nutrition || {};
-  const cal = num(n.calories), p = num(n.protein), c = num(n.carbohydrate), fat = num(n.fat);
-  $('foodName').textContent = f.food_name;
-  $('foodMass').textContent = num(f.mass_g).toFixed(0) + ' g';
-  $('valProtein').innerHTML = p.toFixed(1) + '<em>g</em>';
-  $('valCarbs').innerHTML = c.toFixed(1) + '<em>g</em>';
-  $('valFat').innerHTML = fat.toFixed(1) + '<em>g</em>';
-
-  // count up calories
-  cancelAnimationFrame(raf);
-  const t0 = performance.now(), dur = 900;
-  const tick = t => {
-    const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
-    $('valCalories').textContent = Math.round(cal * e);
-    if (k < 1) raf = requestAnimationFrame(tick);
-  };
-  raf = requestAnimationFrame(tick);
-
-  // macro ring: share of calories from each macro
-  const kp = p * 4, kc = c * 4, kf = fat * 9, total = (kp + kc + kf) || 1;
-  let cum = 0;
-  [['arcP', kp], ['arcC', kc], ['arcF', kf]].forEach(([id, k]) => {
-    const share = k / total * 100, len = Math.max(0, share - (share > 2 ? 1.6 : 0));
-    const el = $(id);
-    el.style.strokeDashoffset = -cum;
-    requestAnimationFrame(() => el.style.strokeDasharray = len.toFixed(2) + ' ' + (100 - len).toFixed(2));
-    cum += share;
-  });
-
-  // bars scaled to the largest macro by weight
-  const max = Math.max(p, c, fat) || 1;
-  $('barP').style.width = (p / max * 100) + '%';
-  $('barC').style.width = (c / max * 100) + '%';
-  $('barF').style.width = (fat / max * 100) + '%';
-}
+$("analyzeBtn").addEventListener("click",async()=>{
+ if(!selectedFile){setMessage("Choose an image first.",true);return;}
+ if(activeController)activeController.abort();
+ activeController=new AbortController();const signal=activeController.signal;
+ $("analyzeBtn").disabled=true;$("demoResult").classList.remove("show");resetSteps();setMessage("Uploading image and starting analysis…");
+ const form=new FormData();form.append("file",selectedFile,selectedFile.name);
+ const timeout=setTimeout(()=>activeController&&activeController.abort(),150000);
+ try{
+  const response=await fetch(API_URL,{method:"POST",body:form,signal,headers:{Accept:"text/event-stream"}});
+  if(!response.ok){let detail="Request failed ("+response.status+").";try{const body=await response.json();if(typeof body.detail==="string")detail=body.detail;else if(typeof body.error==="string")detail=body.error;}catch{}throw new Error(detail);}
+  await consumeSSE(response,signal);
+ }catch(error){
+  const message=error.name==="AbortError"?"The request timed out or was cancelled. Please try again.":(error.message||"The analysis request failed.");
+  setMessage(message,true);
+ }finally{clearTimeout(timeout);$("analyzeBtn").disabled=false;activeController=null;}
+});
+$("clearBtn").addEventListener("click",()=>{
+ if(activeController)activeController.abort();selectedFile=null;$("mealFile").value="";$("preview").removeAttribute("src");$("preview").style.display="none";$("demoResult").classList.remove("show");$("rawResult").textContent="No response yet.";resetSteps();setMessage("Ready when you are.");if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=null;}
+});
 </script>
 </body>
 </html>
