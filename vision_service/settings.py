@@ -12,8 +12,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def _positive_int(name: str, default: str) -> int:
-    raw = os.environ.get(name, default).strip()
+def _positive_int(name: str) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        raise ValueError(f"{name} must be configured as a positive integer.")
     try:
         value = int(raw)
     except ValueError as exc:
@@ -23,8 +25,10 @@ def _positive_int(name: str, default: str) -> int:
     return value
 
 
-def _positive_float(name: str, default: str) -> float:
-    raw = os.environ.get(name, default).strip()
+def _positive_float(name: str) -> float:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        raise ValueError(f"{name} must be configured as a positive number.")
     try:
         value = float(raw)
     except ValueError as exc:
@@ -34,8 +38,10 @@ def _positive_float(name: str, default: str) -> float:
     return value
 
 
-def _threshold(name: str, default: str) -> float:
-    raw = os.environ.get(name, default).strip()
+def _threshold(name: str) -> float:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        raise ValueError(f"{name} must be configured between 0 and 1.")
     try:
         value = float(raw)
     except ValueError as exc:
@@ -45,8 +51,10 @@ def _threshold(name: str, default: str) -> float:
     return value
 
 
-def _boolean(name: str, default: str) -> bool:
-    raw = os.environ.get(name, default).strip().lower()
+def _boolean(name: str) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        raise ValueError(f"{name} must be configured as a boolean value.")
     if raw in {"true", "1", "yes"}:
         return True
     if raw in {"false", "0", "no"}:
@@ -54,8 +62,8 @@ def _boolean(name: str, default: str) -> bool:
     raise ValueError(f"{name} must be a boolean value.")
 
 
-def _required_text(name: str, default: str) -> str:
-    value = os.environ.get(name, default).strip()
+def _required_text(name: str) -> str:
+    value = os.environ.get(name, "").strip()
     if not value:
         raise ValueError(f"{name} must not be empty.")
     return value
@@ -83,7 +91,7 @@ class VisionSettings:
 
     @classmethod
     def from_environment(cls) -> "VisionSettings":
-        app_env = _required_text("APP_ENV", "development").lower()
+        app_env = _required_text("APP_ENV").lower()
         api_token = os.environ.get("VISION_API_TOKEN")
         api_token = api_token.strip() if api_token and api_token.strip() else None
 
@@ -98,7 +106,6 @@ class VisionSettings:
 
         base_url = _required_text(
             "OPENROUTER_BASE_URL",
-            "https://openrouter.ai/api/v1",
         ).rstrip("/")
         parsed_base_url = urlparse(base_url)
         if parsed_base_url.scheme not in {"http", "https"} or not parsed_base_url.netloc:
@@ -113,34 +120,28 @@ class VisionSettings:
             inference_endpoint=endpoint,
             request_timeout_seconds=_positive_float(
                 "VISION_REQUEST_TIMEOUT_SECONDS",
-                "300",
             ),
             openrouter_api_key=openrouter_key,
             openrouter_base_url=base_url,
             openrouter_model=_required_text(
                 "OPENROUTER_MODEL",
-                "google/gemma-3-27b-it",
-            ),
+                ),
             openrouter_max_tokens=_positive_int(
                 "OPENROUTER_MAX_TOKENS",
-                "800",
             ),
             grounding_dino_model_id=_required_text(
                 "GROUNDING_DINO_MODEL_ID",
-                "IDEA-Research/grounding-dino-base",
             ),
             sam2_model_id=_required_text(
                 "SAM2_MODEL_ID",
-                "facebook/sam2-hiera-large",
             ),
             moge_model_id=_required_text(
                 "MOGE_MODEL_ID",
-                "Ruicheng/moge-2-vitl-normal",
             ),
-            box_threshold=_threshold("BOX_THRESHOLD", "0.35"),
-            text_threshold=_threshold("TEXT_THRESHOLD", "0.25"),
-            show_visualizations=_boolean("SHOW_VISUALIZATIONS", "false"),
-            max_array_side=_positive_int("VISION_MAX_ARRAY_SIDE", "512"),
+            box_threshold=_threshold("BOX_THRESHOLD"),
+            text_threshold=_threshold("TEXT_THRESHOLD"),
+            show_visualizations=_boolean("SHOW_VISUALIZATIONS"),
+            max_array_side=_positive_int("VISION_MAX_ARRAY_SIDE"),
         )
 
 
