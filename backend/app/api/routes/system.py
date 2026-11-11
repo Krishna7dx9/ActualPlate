@@ -68,11 +68,22 @@ async def _health_components(db: Session) -> dict[str, object]:
     }
 
 
+@router.get("/live")
+def liveness():
+    return {"status": "alive"}
+
+
 @router.get("/health")
 async def health(db: Session = Depends(get_db)):
     components = await _health_components(db)
-    status = "ok" if components["database"]["status"] == "ok" else "degraded"
-    return {"status": status, "components": components}
+    rate_status = components["rate_limit_store"]["status"]
+    worker_status = components["vision_worker"]["status"]
+    healthy = (
+        components["database"]["status"] == "ok"
+        and rate_status in {"ok", "local"}
+        and worker_status == "ready"
+    )
+    return {"status": "ok" if healthy else "degraded", "components": components}
 
 
 @router.get("/ready")
