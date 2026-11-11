@@ -28,7 +28,7 @@ def mock_inference_result():
         label="fries",
         score=0.90,
         mask_pixels=250000, 
-        depth_m={"min": 1.2, "max": 1.3},
+        depth_stats={"min": 1.2, "max": 1.3},
         bbox=[200.0, 200.0, 300.0, 300.0] # 100x100 box
     )
     
