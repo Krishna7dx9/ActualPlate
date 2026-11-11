@@ -2,11 +2,12 @@
 
 ## Backend endpoints
 
-- `GET /v1/system/health`: lightweight public health report for database, rate-limit store, and the vision worker's reported model state. It does not expose credentials or raw exceptions.
+- `GET /v1/system/live`: minimal process-liveness probe.
+- `GET /v1/system/health`: public dependency health report for database, rate-limit store, and the vision worker's reported model state. It does not expose credentials or raw exceptions.
 - `GET /v1/system/ready`: returns 200 only when the database and rate-limit store are available and the vision worker reports all configured models loaded; otherwise it returns 503.
 - `POST /v1/system/warmup`: privileged owner/admin action requiring the `system:warmup` scope. It asks the internal vision worker to load Grounding DINO, SAM2, and MoGe models.
 
-Use `/health` for liveness and `/ready` for traffic readiness. A cold worker may be alive but not ready. Do not configure an orchestrator to repeatedly restart a healthy cold worker solely because readiness is not yet true.
+Use `/live` for liveness, `/health` for component status, and `/ready` for traffic readiness. A cold worker may be alive but not ready. Do not configure an orchestrator to repeatedly restart a healthy cold worker solely because readiness is not yet true.
 
 ## Worker behavior
 
@@ -20,7 +21,7 @@ Use `/health` for liveness and `/ready` for traffic readiness. A cold worker may
 - Backend and vision-worker `/docs`, `/redoc`, and `/openapi.json` are disabled when `APP_ENV=production`.
 - The backend applies `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, and `Cross-Origin-Opener-Policy`.
 - Production API responses receive a restrictive CSP. HSTS is emitted only when the ASGI request scheme is HTTPS; deployments behind a TLS-terminating proxy must configure trusted proxy scheme handling at the edge.
-- Health and readiness probes bypass request rate limiting so they can report the state of the rate-limit backend itself. They still receive security headers.
+- Liveness, health, and readiness probes bypass request rate limiting so they can report the state of the rate-limit backend itself. They still receive security headers.
 
 ## Operational requirements
 
