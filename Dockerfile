@@ -1,38 +1,31 @@
-# Use official PyTorch image with CUDA 12.1 for GPU acceleration
-FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
+# Pin the CUDA-enabled PyTorch runtime to a release compatible with NumPy 2.
+FROM pytorch/pytorch:2.14.1-cuda12.6-cudnn9-runtime
 
-# Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
     PYTHONPATH=/app
 
-# Install system dependencies (git for MoGe, libgl for OpenCV)
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
 WORKDIR /app
 
-# Copy requirements first (this caches the pip install layer to save build time)
+# Keep the CPU/backend dependency set separate from the GPU inference stack.
+COPY requirements/backend.txt /app/requirements/backend.txt
 COPY vision_service/inference/requirements.txt /app/vision_service/inference/requirements.txt
-COPY backend/requirements.txt /app/backend/requirements.txt
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r vision_service/inference/requirements.txt && \
-    if [ -f backend/requirements.txt ]; then pip install --no-cache-dir -r backend/requirements.txt; fi
+RUN python -m pip install --no-cache-dir --upgrade pip && \
+    python -m pip install --no-cache-dir -r /app/requirements/backend.txt && \
+    python -m pip install --no-cache-dir -r /app/vision_service/inference/requirements.txt && \
+    python -m pip check
 
-# Copy the rest of the application
 COPY . /app
 
-# Make the start script executable
 RUN chmod +x /app/start.sh
 
-# Expose both ports
 EXPOSE 8000 8001
 
-# Run the startup script
 CMD ["/app/start.sh"]
