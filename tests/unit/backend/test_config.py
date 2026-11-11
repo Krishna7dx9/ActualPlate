@@ -50,3 +50,14 @@ def test_request_body_limit_cannot_be_smaller_than_upload_limit(monkeypatch):
 
     with pytest.raises(ValueError, match="MAX_REQUEST_BODY_BYTES"):
         Settings.from_environment()
+
+@pytest.mark.parametrize("value", ["prod", "staging", "production-like", ""])
+def test_rejects_unknown_app_environment(value, monkeypatch):
+    monkeypatch.setenv("APP_ENV", value)
+    monkeypatch.setenv("MAX_UPLOAD_BYTES", "10485760")
+    monkeypatch.setenv("MAX_REQUEST_BODY_BYTES", "12582912")
+    monkeypatch.setenv("MAX_IMAGE_PIXELS", "40000000")
+    monkeypatch.setenv("VISION_INFERENCE_ENDPOINT", "http://localhost:8001")
+
+    with pytest.raises(ValueError, match="APP_ENV"):
+        Settings.from_environment()
