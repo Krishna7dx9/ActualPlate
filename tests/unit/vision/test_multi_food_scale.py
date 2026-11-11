@@ -21,7 +21,7 @@ def mock_inference_result():
         label="burger",
         score=0.95,
         mask_pixels=250000, # 500x500 area
-        depth_m={"min": 1.0, "max": 1.5},
+        depth_stats={"min": 1.0, "max": 1.5},
         bbox=[10.0, 10.0, 110.0, 110.0] # 100x100 box
     )
     food2 = FoodDetection(
@@ -41,7 +41,7 @@ def mock_inference_result():
         image_width=500,
         image_height=500,
         focal_length_px=800.0,
-        depth_unit="meters",
+        depth_unit="relative",
         depth_map=np.ones((500, 500), dtype=np.float32), 
         masks=[mask1, mask2]
     )
@@ -79,18 +79,21 @@ def test_api_applies_per_food_scale_map(mock_detect_and_measure, mock_inference_
     burger = next(f for f in foods if f["label"] == "burger")
     fries = next(f for f in foods if f["label"] == "fries")
 
-    # Verify Burger Math 
-    assert burger["volume_status"] == "valid"
-    # burger bbox width = 100. diameter = 10. So cm_per_px = 10/100 = 0.1
-    assert abs(burger["scale_factor_applied"] - 0.1) < 0.0001 
-    assert "volume_cm3" in burger
+    # VLM-provided dimensions may drive diagnostics, but never a metric result.
+    assert burger["volume_status"] == "unvalidated"
+    assert burger["volume_cm3"] is None
+    assert burger["experimental_volume_cm3"] is not None
+    assert abs(burger["experimental_scale_factor_cm_per_px"] - 0.1) < 0.0001
 
-    # Verify Fries Math
-    assert fries["volume_status"] == "valid"
-    # fries bbox width = 100. diameter = 2. So cm_per_px = 2/100 = 0.02
-    assert abs(fries["scale_factor_applied"] - 0.02) < 0.0001
-    assert "volume_cm3" in fries
-    
-    # CRUCIAL: Ensure they didn't get the same scale applied
-    assert burger["scale_factor_applied"] != fries["scale_factor_applied"]
+    assert fries["volume_status"] == "unvalidated"
+    assert fries["volume_cm3"] is None
+    assert fries["experimental_volume_cm3"] is not None
+    assert abs(fries["experimental_scale_factor_cm_per_px"] - 0.02) < 0.0001
+
+    # Each food keeps its own diagnostic scale, but neither is certified metric.
+    assert (
+        burger["experimental_scale_factor_cm_per_px"]
+        != fries["experimental_scale_factor_cm_per_px"]
+    )
+    assert data["depth_unit"] == "relative"
     print("\n✅ TEST PASSED: Burger and Fries received different scale factors.")
