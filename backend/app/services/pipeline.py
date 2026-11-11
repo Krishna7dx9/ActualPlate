@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import math
 import os
 import tempfile
 from typing import Any
@@ -54,16 +55,26 @@ def _detect_geometry(image_path: str, detected_foods: list[dict[str, Any]]) -> d
 
 
 def _merge_volumes(foods_data: list[dict[str, Any]]) -> dict[str, float]:
+    """Merge only finite, positive authoritative metric volumes by label."""
     merged: dict[str, float] = {}
     for item in foods_data:
         label = str(item.get("label", "")).strip().lower()
         volume = item.get("volume_cm3")
-        if label and isinstance(volume, (int, float)) and volume > 0:
+        if (
+            label
+            and not isinstance(volume, bool)
+            and isinstance(volume, (int, float))
+            and math.isfinite(float(volume))
+            and volume > 0
+        ):
             merged[label] = merged.get(label, 0.0) + float(volume)
     return merged
 
 
-def _lookup_nutrition(food_name: str, mass_grams: float) -> tuple[dict | None, str | None]:
+def _lookup_nutrition(
+    food_name: str,
+    mass_grams: float,
+) -> tuple[dict | None, str | None]:
     """Return nutrition data or a stable failure code; never silently discard errors."""
     try:
         provider_data = search_food(food_name)
@@ -104,18 +115,33 @@ async def _enrich_nutrition(
     for item in detected_foods:
         query = item.get("search_query")
         density = item.get("density_g_cm3")
-        if not query or not isinstance(density, (int, float)) or density <= 0:
+        if (
+            not query
+            or isinstance(density, bool)
+            or not isinstance(density, (int, float))
+            or not math.isfinite(float(density))
+            or density <= 0
+        ):
             continue
 
         volume = volumes_by_label.get(str(query).strip().lower())
-        if volume is None:
+        if (
+            isinstance(volume, bool)
+            or not isinstance(volume, (int, float))
+            or not math.isfinite(float(volume))
+            or volume <= 0
+        ):
+            continue
+
+        mass_grams = float(volume) * float(density)
+        if not math.isfinite(mass_grams) or mass_grams <= 0:
             continue
 
         attempted += 1
         nutrition, failure_code = await run_in_threadpool(
             _lookup_nutrition,
             str(query),
-            volume * float(density),
+            mass_grams,
         )
         if nutrition is not None:
             nutrition_results.append(nutrition)
@@ -214,6 +240,7 @@ def _clean_geometry(foods_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for item in foods_data:
         clean_item = item.copy()
         clean_item.pop("mask_b64", None)
+        clean_item.pop("mask_array_b64", None)
         cleaned.append(clean_item)
     return cleaned
 
