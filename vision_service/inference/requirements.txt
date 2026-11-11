@@ -1,8 +1,10 @@
 # GPU/model dependencies for the inference service.
-# Keep the CUDA-enabled torch version aligned with the Docker base image.
+# Keep the CUDA-enabled torch runtime aligned with the Docker base image.
+# Keep shared CLI dependencies compatible with the pinned base image packages.
 # Model-loading compatibility must be verified before upgrading transformers,
 # SAM2, or the pinned MoGe revision.
 
+click==8.3.3
 numpy==2.4.6
 scipy==1.17.1
 torch==2.14.1
