@@ -6,13 +6,13 @@ The backend reads runtime configuration from environment variables. Deployment-s
 
 | Variable | Required | Description |
 |---|---|---|
-| APP_ENV | No (defaults to development) | Runtime environment. Accepted values are development, test, and production. |
-| VISION_INFERENCE_ENDPOINT | Yes | Absolute HTTP(S) URL for the vision worker. The backend fails startup when it is missing or malformed. |
+| APP_ENV | Required | Runtime environment. The application uses development behavior outside production. |
+| VISION_INFERENCE_ENDPOINT | Required | Absolute HTTP(S) URL for the vision worker. The backend fails startup when it is missing or malformed. |
 | VISION_API_TOKEN | Required when APP_ENV=production | Shared service-to-service token. Store it in a secret manager. |
 | CORS_ALLOWED_ORIGINS | Required for browser clients hosted on another origin | Comma-separated list of exact trusted origins, including scheme and optional port. An empty value denies cross-origin browser access. Wildcard origins are rejected in production. |
-| MAX_UPLOAD_BYTES | Yes | Maximum encoded image-file size in bytes. Must be a positive integer. |
-| MAX_REQUEST_BODY_BYTES | Yes | Maximum total HTTP request body size, including multipart framing. Must be greater than or equal to MAX_UPLOAD_BYTES. |
-| MAX_IMAGE_PIXELS | Yes | Maximum decoded image pixel count (width × height). Must be a positive integer. |
+| MAX_UPLOAD_BYTES | Required | Maximum encoded image-file size in bytes. Must be a positive integer. |
+| MAX_REQUEST_BODY_BYTES | Required | Maximum total HTTP request body size, including multipart framing. Must be greater than or equal to MAX_UPLOAD_BYTES. |
+| MAX_IMAGE_PIXELS | Required | Maximum decoded image pixel count (width × height). Must be a positive integer. |
 | OPENROUTER_API_KEY | Required for food recognition; required at startup in production | Provider credential for food recognition. Store it in a secret manager. |
 | FATSECRET_CLIENT_ID | Required for nutrition lookup | Nutrition-provider client ID. Store it in a secret manager. |
 | FATSECRET_CLIENT_SECRET | Required for nutrition lookup | Nutrition-provider client secret. Store it in a secret manager. |

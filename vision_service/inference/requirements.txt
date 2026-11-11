@@ -1,28 +1,22 @@
-# ActualPlate inference service dependencies.
-#
-# This file is separate from the backend's requirements.txt on
-# purpose: the backend must not install torch (2 GB CUDA stack
-# for a service that never runs inference), and the inference
-# service must not install the backend's HTTP/nutrition stack.
-#
-# numpy pin: ml-depth-pro (Apple) declares numpy<2 in its own
-# metadata. bootstrap.sh installs it with --no-deps to bypass
-# that pin, and this file pins numpy>=2.1,<3 so that any future
-# plain install of the inference deps cannot downgrade numpy and
-# break Colab's scipy/opencv/jax stack.
+# GPU/model dependencies for the inference service.
+# Keep the CUDA-enabled torch runtime aligned with the Docker base image.
+# Keep shared CLI dependencies compatible with the pinned base image packages.
+# Model-loading compatibility must be verified before upgrading transformers,
+# SAM2, or the pinned MoGe revision.
 
-numpy>=2.1,<3
+click==8.3.3
+numpy==2.4.6
+scipy==1.17.1
+torch==2.14.1
 
-torch
 transformers
 sam2
-opencv-python
-pillow
+opencv-python-headless==5.0.0.93
+Pillow>=10,<13
 matplotlib
-scipy
-fastapi
-uvicorn
+fastapi==0.139.0
+uvicorn==0.50.0
 nest-asyncio
-python-multipart
-requests
-git+https://github.com/microsoft/MoGe.git
+python-multipart==0.0.32
+requests==2.34.2
+git+https://github.com/microsoft/MoGe.git@74fbce054ebed49800de42d0ad0e83495065719a
