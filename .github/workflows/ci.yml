@@ -27,7 +27,7 @@ jobs:
         # Install CPU-only PyTorch to avoid huge downloads
         pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
         # Install other required dependencies
-        pip install fastapi httpx python-multipart scipy numpy requests python-dotenv openai opencv-python-headless
+        pip install fastapi httpx python-multipart scipy numpy requests python-dotenv openai opencv-python-headless 'Pillow>=10,<13'
 
     - name: Run Fast Tests
       env:
