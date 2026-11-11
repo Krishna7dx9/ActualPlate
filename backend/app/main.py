@@ -7,11 +7,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.app.api.routes.nutrition import router as nutrition_router
 from backend.app.api.routes.upload import router as upload_router
 from backend.app.config import settings
+from backend.app.middleware.request_size_limit import RequestSizeLimitMiddleware
 
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
+
+app.add_middleware(
+    RequestSizeLimitMiddleware,
+    max_bytes=settings.max_request_body_bytes,
+)
 
 app.add_middleware(
     CORSMiddleware,
