@@ -15,6 +15,7 @@ jiter==0.16.0
 numpy==2.5.3
 openai==2.44.0
 packaging==26.2
+Pillow>=10,<13
 pluggy==1.6.0
 pydantic==2.13.4
 pydantic_core==2.46.4
