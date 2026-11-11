@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -10,12 +11,21 @@ from backend.app.auth.routes import router as auth_router
 from backend.app.auth.api_keys import router as api_keys_router
 from backend.app.config import settings
 from backend.app.middleware.request_size_limit import RequestSizeLimitMiddleware
+from backend.app.middleware.rate_limit import RateLimitMiddleware, close_rate_limiter
+from backend.app.api.routes.usage import router as usage_router
 
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    await close_rate_limiter()
 
+
+app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
     RequestSizeLimitMiddleware,
     max_bytes=settings.max_request_body_bytes,
@@ -33,6 +43,7 @@ app.include_router(nutrition_router)
 app.include_router(upload_router)
 app.include_router(auth_router)
 app.include_router(api_keys_router)
+app.include_router(usage_router)
 
 
 @app.exception_handler(Exception)
