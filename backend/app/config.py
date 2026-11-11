@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -35,6 +36,8 @@ class Settings:
 
     environment: str
     cors_allowed_origins: tuple[str, ...]
+    vision_inference_endpoint: str
+    vision_api_token: str | None
     max_upload_bytes: int
     max_request_body_bytes: int
     max_image_pixels: int
@@ -51,6 +54,27 @@ class Settings:
             for origin in raw_origins.split(",")
             if origin.strip()
         )
+
+        raw_endpoint = os.environ.get("VISION_INFERENCE_ENDPOINT", "").strip()
+        parsed_endpoint = urlparse(raw_endpoint)
+        if (
+            parsed_endpoint.scheme not in {"http", "https"}
+            or not parsed_endpoint.netloc
+        ):
+            raise ValueError(
+                "VISION_INFERENCE_ENDPOINT must be configured as an absolute HTTP(S) URL."
+            )
+
+        vision_api_token = os.environ.get("VISION_API_TOKEN")
+        vision_api_token = (
+            vision_api_token.strip()
+            if vision_api_token and vision_api_token.strip()
+            else None
+        )
+        if environment == "production" and not vision_api_token:
+            raise ValueError(
+                "VISION_API_TOKEN must be configured when APP_ENV=production."
+            )
 
         if environment == "production" and "*" in origins:
             raise ValueError(
@@ -70,6 +94,8 @@ class Settings:
         return cls(
             environment=environment,
             cors_allowed_origins=origins,
+            vision_inference_endpoint=raw_endpoint.rstrip("/"),
+            vision_api_token=vision_api_token,
             max_upload_bytes=max_upload_bytes,
             max_request_body_bytes=max_request_body_bytes,
             max_image_pixels=_required_positive_integer("MAX_IMAGE_PIXELS"),
