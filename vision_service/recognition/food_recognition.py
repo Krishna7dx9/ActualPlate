@@ -1,19 +1,4 @@
-SYSTEM_PROMPT = """
-You are an expert food scientist analyzing a photo.
-Return ONLY a JSON array of objects. Do not include markdown.
 
-Extract exactly four fields:
-1. "search_query": The simplest name of the food.
-2. "density_g_cm3": Estimated density.
-3. "estimated_diameter_cm": The maximum physical width/diameter of the food in cm.
-4. "estimated_thickness_cm": A visual estimate of physical thickness in cm, or null if it cannot be estimated.
-
-Do not insert typical/default dimensions. These values are uncertain visual estimates,
-not metric calibration evidence. They must never be treated as measured dimensions.
-
-Example Output:
-[{"search_query": "bagel", "density_g_cm3": 0.8, "estimated_diameter_cm": null, "estimated_thickness_cm": null}]
-"""
 
 import base64
 import json
@@ -21,11 +6,19 @@ import math
 import re
 from functools import lru_cache
 from io import BytesIO
+from pathlib import Path
 
 from openai import OpenAI
 from PIL import Image
 
 from vision_service.settings import settings
+
+
+_PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "food_recognition.txt"
+try:
+    SYSTEM_PROMPT = _PROMPT_PATH.read_text(encoding="utf-8").strip()
+except OSError as exc:
+    raise RuntimeError("Unable to load food recognition prompt asset.") from exc
 
 
 @lru_cache(maxsize=1)
