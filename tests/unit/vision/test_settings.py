@@ -44,3 +44,12 @@ def test_vision_settings_allow_missing_provider_secret_until_use(monkeypatch):
     settings = VisionSettings.from_environment()
 
     assert settings.openrouter_api_key is None
+
+
+
+def test_production_requires_provider_credentials(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
+        VisionSettings.from_environment()
