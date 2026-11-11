@@ -4,4 +4,4 @@ import os
 # This prevents the app from crashing when it looks for tokens during test collection.
 os.environ["VISION_API_TOKEN"] = "test-token"
 os.environ["FATSECRET_CLIENT_ID"] = "test-id"
-os.environ["FATSECRET_CLIENT_SECRET"] = "test-secret"os.environ["VISION_INFERENCE_ENDPOINT"] = "http://localhost:8001"
+os.environ["FATSECRET_CLIENT_SECRET"] = "test-secret"\nos.environ["VISION_INFERENCE_ENDPOINT"] = "http://localhost:8001"
