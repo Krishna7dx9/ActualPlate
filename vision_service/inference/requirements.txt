@@ -4,7 +4,7 @@
 # SAM2, or the pinned MoGe revision.
 
 numpy==2.4.6
-scipy==1.18.1
+scipy==1.17.1
 torch==2.14.1
 
 transformers
