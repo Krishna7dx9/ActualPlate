@@ -34,31 +34,19 @@ def _decode_and_reencode(payload: bytes, max_pixels: int) -> tuple[bytes, str]:
             image.load()
             normalized = ImageOps.exif_transpose(image)
             output = BytesIO()
+            has_alpha = "A" in normalized.getbands() or "transparency" in normalized.info
             if image_format == "JPEG":
-                normalized.convert("RGB").save(
-                    output,
-                    format="JPEG",
-                    quality=95,
-                    optimize=True,
-                )
+                clean_image = normalized.convert("RGB")
+                clean_image.info.clear()
+                clean_image.save(output, format="JPEG", quality=95, optimize=True)
             elif image_format == "PNG":
-                normalized.save(output, format="PNG", optimize=True)
+                clean_image = normalized.convert("RGBA" if has_alpha else "RGB")
+                clean_image.info.clear()
+                clean_image.save(output, format="PNG", optimize=True)
             else:
-                has_alpha = "A" in normalized.getbands() or "transparency" in normalized.info
-                if has_alpha:
-                    normalized.convert("RGBA").save(
-                        output,
-                        format="WEBP",
-                        quality=95,
-                        method=4,
-                    )
-                else:
-                    normalized.convert("RGB").save(
-                        output,
-                        format="WEBP",
-                        quality=95,
-                        method=4,
-                    )
+                clean_image = normalized.convert("RGBA" if has_alpha else "RGB")
+                clean_image.info.clear()
+                clean_image.save(output, format="WEBP", quality=95, method=4)
             return output.getvalue(), image_format
     except HTTPException:
         raise
