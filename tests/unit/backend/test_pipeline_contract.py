@@ -85,7 +85,7 @@ async def test_stream_render_error_uses_valid_sse_frame(monkeypatch):
     events = [event async for event in pipeline.process_image_stream(upload)]
 
     error_event = events[-1]
-    assert error_event.endswith("\\n\\n")
+    assert error_event.endswith("\n\n")
     payload = json.loads(error_event.removeprefix("data: ").strip())
     assert payload == {
         "step": "error",
