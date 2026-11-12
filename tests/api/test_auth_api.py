@@ -304,3 +304,43 @@ def test_versioned_scan_records_usage_for_a_successful_stream(client, monkeypatc
     )
     assert usage.status_code == 200
     assert usage.json()["used"] == 1
+
+
+
+def test_stale_pending_scan_reservation_still_counts_toward_daily_quota(client):
+    from datetime import timedelta
+
+    from backend.app.services.usage_metering import current_usage
+
+    created = _signup(client, "pending-quota@example.com")
+    with client.app.state.test_session_factory() as db:
+        organization = db.scalar(
+            select(Organization).where(Organization.slug == created["organization"]["slug"])
+        )
+        db.add(UsageLog(
+            id=new_id(),
+            organization_id=organization.id,
+            api_key_id=None,
+            request_id="long-running-pending",
+            endpoint="/v1/scans",
+            status_code=None,
+            units=1,
+            created_at=datetime.now(timezone.utc) - timedelta(minutes=30),
+            attributes={},
+        ))
+        db.add(UsageLog(
+            id=new_id(),
+            organization_id=organization.id,
+            api_key_id=None,
+            request_id="failed-server-request",
+            endpoint="/v1/scans",
+            status_code=500,
+            units=1,
+            created_at=datetime.now(timezone.utc) - timedelta(minutes=20),
+            attributes={},
+        ))
+        db.commit()
+        usage = current_usage(db, organization.id)
+
+    assert usage["used"] == 1
+    assert usage["remaining"] == 99
