@@ -47,3 +47,47 @@ def test_nutrition_provider_failure_is_reported_not_silently_swallowed():
     assert results == []
     assert errors == [{"food": "bread", "code": "provider_unavailable"}]
     assert status == "unavailable"
+
+
+
+def test_stream_render_error_uses_valid_sse_frame(monkeypatch):
+    import asyncio
+    import json
+    from io import BytesIO
+
+    from fastapi import UploadFile
+
+    from backend.app.services import pipeline
+
+    monkeypatch.setattr(pipeline, "detect_food", lambda _image: [{"search_query": "bread"}])
+    monkeypatch.setattr(pipeline.detector, "detect", lambda **_kwargs: {"foods": []})
+    monkeypatch.setattr(pipeline.cv2, "imread", lambda _path: None)
+
+    async def collect():
+        upload = UploadFile(filename="image.jpg", file=BytesIO(b"image"))
+        return [event async for event in pipeline.process_image_stream(upload)]
+
+    events = asyncio.run(collect())
+    error_event = events[-1]
+    assert error_event.endswith("\n\n")
+    payload = json.loads(error_event.removeprefix("data: ").strip())
+    assert payload == {
+        "step": "error",
+        "status": "error",
+        "message": "Image rendering is temporarily unavailable.",
+    }
+
+
+def test_public_geometry_removes_all_encoded_masks():
+    from backend.app.services.pipeline import _clean_geometry_payload
+
+    geometry = [{
+        "label": "bread",
+        "mask_b64": "png-data",
+        "mask_array_b64": "npz-data",
+        "volume_cm3": None,
+    }]
+    assert _clean_geometry_payload(geometry) == [{
+        "label": "bread",
+        "volume_cm3": None,
+    }]
