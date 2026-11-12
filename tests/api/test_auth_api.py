@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import io
+from datetime import datetime, timezone
+
 import pytest
+from PIL import Image
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
+from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend.app.database import Base, get_db
 from backend.app.main import app
-from backend.app.models import Plan
+from backend.app.models import APIKey, Organization, Plan, UsageLog, new_id
 
 
 @pytest.fixture()
@@ -48,6 +53,7 @@ def client():
             yield db
 
     app.dependency_overrides[get_db] = override_get_db
+    app.state.test_session_factory = TestingSessionLocal
     try:
         with TestClient(app) as test_client:
             yield test_client
@@ -183,3 +189,158 @@ def test_api_keys_are_isolated_to_their_organization(client):
 def test_authentication_is_required_for_me(client):
     response = client.get("/v1/auth/me")
     assert response.status_code == 401
+
+
+def _png_bytes():
+    output = io.BytesIO()
+    Image.new("RGB", (2, 2), color=(120, 80, 40)).save(output, format="PNG")
+    return output.getvalue()
+
+
+def test_usage_endpoint_returns_only_authenticated_organization_usage(client):
+    first = _signup(client, "usage-first@example.com")
+    second = _signup(client, "usage-second@example.com")
+
+    with client.app.state.test_session_factory() as db:
+        first_org = db.scalar(
+            select(Organization).where(Organization.slug == first["organization"]["slug"])
+        )
+        db.add(UsageLog(
+            id=new_id(),
+            organization_id=first_org.id,
+            api_key_id=None,
+            request_id="test-request",
+            endpoint="/v1/scans",
+            status_code=200,
+            units=1,
+            created_at=datetime.now(timezone.utc),
+            attributes={},
+        ))
+        db.commit()
+
+    first_usage = client.get(
+        "/v1/usage",
+        headers={"Authorization": f"Bearer {first['access_token']}"},
+    )
+    second_usage = client.get(
+        "/v1/usage",
+        headers={"Authorization": f"Bearer {second['access_token']}"},
+    )
+    assert first_usage.status_code == 200
+    assert first_usage.json()["used"] == 1
+    assert first_usage.json()["limit"] == 100
+    assert first_usage.json()["remaining"] == 99
+    assert second_usage.status_code == 200
+    assert second_usage.json()["used"] == 0
+
+
+def test_versioned_scan_requires_authentication(client):
+    response = client.post(
+        "/v1/scans",
+        files={"file": ("meal.png", _png_bytes(), "image/png")},
+    )
+    assert response.status_code == 401
+
+
+def test_versioned_scan_enforces_daily_quota_before_inference(client):
+    created = _signup(client, "quota@example.com")
+    with client.app.state.test_session_factory() as db:
+        organization = db.scalar(
+            select(Organization).where(Organization.slug == created["organization"]["slug"])
+        )
+        plan = db.get(Plan, organization.plan_id)
+        plan.daily_request_limit = 1
+        db.add(UsageLog(
+            id=new_id(),
+            organization_id=organization.id,
+            api_key_id=None,
+            request_id="already-counted",
+            endpoint="/v1/scans",
+            status_code=200,
+            units=1,
+            created_at=datetime.now(timezone.utc),
+            attributes={},
+        ))
+        db.commit()
+
+    response = client.post(
+        "/v1/scans",
+        headers={"Authorization": f"Bearer {created['access_token']}"},
+        files={"file": ("meal.png", _png_bytes(), "image/png")},
+    )
+    assert response.status_code == 429
+    assert response.json()["limit"] == 1
+    assert int(response.headers["Retry-After"]) >= 1
+    assert response.headers["X-Usage-Remaining"] == "0"
+
+
+def test_versioned_scan_records_usage_for_a_successful_stream(client, monkeypatch):
+    created = _signup(client, "scan@example.com")
+    key_response = client.post(
+        "/v1/api-keys",
+        headers={"Authorization": f"Bearer {created['access_token']}"},
+        json={"name": "scan client", "scopes": ["scans:write"]},
+    )
+    assert key_response.status_code == 201
+
+    async def fake_stream(_file):
+        yield 'data: {"step":"nutrition","status":"done","final":{"foods":[],"nutrition_status":"not_available"}}\n\n'
+
+    monkeypatch.setattr("backend.app.api.routes.upload.process_image_stream", fake_stream)
+    monkeypatch.setattr("backend.app.api.routes.upload.finalize_usage", lambda *_args: None)
+
+    response = client.post(
+        "/v1/scans",
+        headers={"X-API-Key": key_response.json()["key"]},
+        files={"file": ("meal.png", _png_bytes(), "image/png")},
+    )
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"]
+    assert response.headers["X-Usage-Limit"] == "100"
+
+    usage = client.get(
+        "/v1/usage",
+        headers={"Authorization": f"Bearer {created['access_token']}"},
+    )
+    assert usage.status_code == 200
+    assert usage.json()["used"] == 1
+
+
+
+def test_stale_pending_scan_reservation_still_counts_toward_daily_quota(client):
+    from datetime import timedelta
+
+    from backend.app.services.usage_metering import current_usage
+
+    created = _signup(client, "pending-quota@example.com")
+    with client.app.state.test_session_factory() as db:
+        organization = db.scalar(
+            select(Organization).where(Organization.slug == created["organization"]["slug"])
+        )
+        db.add(UsageLog(
+            id=new_id(),
+            organization_id=organization.id,
+            api_key_id=None,
+            request_id="long-running-pending",
+            endpoint="/v1/scans",
+            status_code=None,
+            units=1,
+            created_at=datetime.now(timezone.utc) - timedelta(minutes=30),
+            attributes={},
+        ))
+        db.add(UsageLog(
+            id=new_id(),
+            organization_id=organization.id,
+            api_key_id=None,
+            request_id="failed-server-request",
+            endpoint="/v1/scans",
+            status_code=500,
+            units=1,
+            created_at=datetime.now(timezone.utc) - timedelta(minutes=20),
+            attributes={},
+        ))
+        db.commit()
+        usage = current_usage(db, organization.id)
+
+    assert usage["used"] == 1
+    assert usage["remaining"] == 99

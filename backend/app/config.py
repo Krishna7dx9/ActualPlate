@@ -45,6 +45,8 @@ class Settings:
     jwt_secret_key: str | None
     api_key_hash_secret: str | None
     access_token_ttl_seconds: int
+    redis_url: str | None
+    rate_limit_requests_per_minute: int
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -123,6 +125,24 @@ class Settings:
         if not 60 <= access_token_ttl_seconds <= 3600:
             raise ValueError("ACCESS_TOKEN_TTL_SECONDS must be between 60 and 3600.")
 
+
+        redis_url = os.environ.get("REDIS_URL", "").strip() or None
+        if redis_url:
+            parsed_redis_url = urlparse(redis_url)
+            if parsed_redis_url.scheme not in {"redis", "rediss"} or not parsed_redis_url.netloc:
+                raise ValueError("REDIS_URL must be an absolute redis:// or rediss:// URL.")
+        if environment == "production" and not redis_url:
+            raise ValueError("REDIS_URL must be configured when APP_ENV=production.")
+
+        try:
+            rate_limit_requests_per_minute = int(
+                os.environ.get("RATE_LIMIT_REQUESTS_PER_MINUTE", "60")
+            )
+        except ValueError as exc:
+            raise ValueError("RATE_LIMIT_REQUESTS_PER_MINUTE must be a positive integer.") from exc
+        if not 1 <= rate_limit_requests_per_minute <= 100000:
+            raise ValueError("RATE_LIMIT_REQUESTS_PER_MINUTE must be between 1 and 100000.")
+
         return cls(
             environment=environment,
             cors_allowed_origins=origins,
@@ -135,6 +155,8 @@ class Settings:
             jwt_secret_key=jwt_secret_key,
             api_key_hash_secret=api_key_hash_secret,
             access_token_ttl_seconds=access_token_ttl_seconds,
+            redis_url=redis_url,
+            rate_limit_requests_per_minute=rate_limit_requests_per_minute,
         )
 
 
