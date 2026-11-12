@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, time, timedelta, timezone
 from math import ceil
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from backend.app.database import SessionLocal
@@ -34,14 +34,17 @@ def _day_window(now: datetime | None = None) -> tuple[datetime, datetime]:
 
 
 def _used_today(db: Session, organization_id: str, start: datetime, now: datetime) -> int:
-    pending_cutoff = now - timedelta(minutes=10)
+    # Pending requests remain reserved for the full UTC day. Expiring an
+    # in-flight reservation after a fixed timeout lets long-running scans
+    # evade the organization's quota. Failed server-side requests (5xx) are
+    # excluded once finalized; client errors and completed requests count.
     used = db.scalar(
         select(func.coalesce(func.sum(UsageLog.units), 0)).where(
             UsageLog.organization_id == organization_id,
             UsageLog.created_at >= start,
             or_(
                 UsageLog.status_code < 500,
-                and_(UsageLog.status_code.is_(None), UsageLog.created_at >= pending_cutoff),
+                UsageLog.status_code.is_(None),
             ),
         )
     )
