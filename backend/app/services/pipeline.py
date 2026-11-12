@@ -76,6 +76,17 @@ def _enrich_nutrition(detected_foods, merged):
         nutrition_status = "unavailable"
     return nutrition_results, nutrition_errors, nutrition_status
 
+def _clean_geometry_payload(foods_data):
+    """Remove internal segmentation arrays from the public response contract."""
+    clean_geometry = []
+    for item in foods_data:
+        clean_item = item.copy()
+        clean_item.pop("mask_b64", None)
+        clean_item.pop("mask_array_b64", None)
+        clean_geometry.append(clean_item)
+    return clean_geometry
+
+
 async def process_image(file: UploadFile):
     image = await file.read()
     image_path = None
@@ -182,7 +193,7 @@ async def process_image_stream(file):
         img_array = cv2.imread(image_path)
         if img_array is None:
             logger.error("Validated image could not be decoded by the inference renderer")
-            yield "data: {\"step\":\"error\",\"status\":\"error\",\"message\":\"Image rendering is temporarily unavailable.\"}\\n\\n"
+            yield f"data: {json.dumps({'step': 'error', 'status': 'error', 'message': 'Image rendering is temporarily unavailable.'})}\n\n"
             return
 
         dino_img = img_array.copy()
@@ -203,8 +214,15 @@ async def process_image_stream(file):
         for idx, item in enumerate(foods_data):
             mask_b64 = item.get("mask_b64")
             if mask_b64:
-                mask_bytes = base64.b64decode(mask_b64)
-                mask_np = cv2.imdecode(np.frombuffer(mask_bytes, np.uint8), cv2.IMREAD_GRAYSCALE)
+                try:
+                    mask_bytes = base64.b64decode(mask_b64, validate=True)
+                    mask_np = cv2.imdecode(np.frombuffer(mask_bytes, np.uint8), cv2.IMREAD_GRAYSCALE)
+                except (ValueError, TypeError):
+                    logger.warning("Skipping malformed segmentation mask for item %s", idx)
+                    continue
+                if mask_np is None:
+                    logger.warning("Skipping undecodable segmentation mask for item %s", idx)
+                    continue
                 if mask_np.shape != img_array.shape[:2]:
                     mask_np = cv2.resize(mask_np, (img_array.shape[1], img_array.shape[0]), interpolation=cv2.INTER_NEAREST)
                 
@@ -241,11 +259,7 @@ async def process_image_stream(file):
         nutrition_results, nutrition_errors, nutrition_status = _enrich_nutrition(detected_foods, merged)
 
         # FIX: Remove heavy base64 masks from final payload to prevent browser OOM crash
-        clean_geometry = []
-        for item in foods_data:
-            clean_item = item.copy()
-            clean_item.pop("mask_b64", None)
-            clean_geometry.append(clean_item)
+        clean_geometry = _clean_geometry_payload(foods_data)
 
         final_payload = {
             "foods": nutrition_results, 
