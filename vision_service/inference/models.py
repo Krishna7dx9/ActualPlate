@@ -1,48 +1,22 @@
+"""Thread-safe lazy model loading for the ActualPlate inference service.
+
+MoGe-2 supplies monocular geometry/depth; it does not independently establish
+absolute metric scale for an individual image.
 """
-Model loading for the ActualPlate inference service.
-
-Owns the lifetime of every GPU model the service uses:
-- Grounding DINO (open-vocabulary object detection)
-- SAM2 (image segmentation)
-- MoGe-2 (metric monocular depth - MIT License)
-
-Models are loaded lazily on first access and cached for the process
-lifetime. Loading is expensive (~1–3 minutes on a cold GPU host), so
-the service loads once and serves many requests.
-"""
-
 from __future__ import annotations
 
-import os
 import threading
 from typing import Any
 
 import torch
 
-# --------------------------------------------------------------------
-# Configuration
-# --------------------------------------------------------------------
+from vision_service.settings import settings
+
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+GROUNDING_DINO_MODEL_ID = settings.grounding_dino_model_id
+SAM2_MODEL_ID = settings.sam2_model_id
+MOGE_MODEL_ID = settings.moge_model_id
 
-GROUNDING_DINO_MODEL_ID = os.environ.get(
-    "GROUNDING_DINO_MODEL_ID",
-    "IDEA-Research/grounding-dino-base",
-)
-
-SAM2_MODEL_ID = os.environ.get(
-    "SAM2_MODEL_ID",
-    "facebook/sam2-hiera-large",
-)
-
-# MoGe-2 (MIT License) for metric monocular depth.
-MOGE_MODEL_ID = os.environ.get(
-    "MOGE_MODEL_ID",
-    "Ruicheng/moge-2-vitl-normal",
-)
-
-# --------------------------------------------------------------------
-# Lazy-loaded singletons
-# --------------------------------------------------------------------
 _processor: Any = None
 _grounding_dino: Any = None
 _sam2_predictor: Any = None
@@ -75,10 +49,7 @@ def get_sam2_predictor() -> Any:
 
 
 def get_moge() -> Any:
-    """
-    Load (once) and return the MoGe-2 model.
-    MoGe-2 predicts affine-invariant 3D point maps and metric depth.
-    """
+    """Load MoGe-2 geometry/depth without asserting absolute metric scale."""
     global _moge_model
     with _MODEL_LOAD_LOCK:
         if _moge_model is None:
@@ -89,7 +60,7 @@ def get_moge() -> Any:
 
 
 def models_loaded() -> bool:
-    """Used by /health to report readiness."""
+    """Return whether every inference model has completed initialization."""
     return all(
         obj is not None
         for obj in (_processor, _grounding_dino, _sam2_predictor, _moge_model)
