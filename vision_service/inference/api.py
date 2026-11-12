@@ -1,53 +1,42 @@
 """
 FastAPI app for the ActualPlate vision inference service.
 
-Two endpoints:
+GET /health reports process liveness and whether models have loaded.
+POST /detect accepts an image and labels and returns per-food metadata.
 
-    GET  /health    readiness check (are models loaded?)
-    POST /detect    image + labels -> per-food volume + metadata
+Models are loaded lazily on the first /detect request. Authentication is
+required when VISION_API_TOKEN is configured; production startup rejects a
+missing token.
 
-The app holds no model state of its own. Model loading is owned by
-models.py and is triggered lazily by the first /detect request.
+The response always includes the PNG mask used by the backend visualization
+pipeline. When include_arrays=true, downsampled NumPy arrays are additionally
+returned as NPZ payloads under mask_array_b64 and depth_map_b64.
 
-Auth: VISION_API_TOKEN is required at startup. /detect and /warmup require
-the X-API-Token header. The lightweight /health endpoint is public for probes.
-
-Response format:
-
-The default response includes only summary fields. If the request
-sets `include_arrays=true`, the response additionally includes
-base64-encoded numpy arrays, downsampled to a 512-pixel max side:
-
-    depth_map_b64    one per request, (H, W) float32
-    mask_b64         one per food, (H, W) uint8
-
-Downsampling bounds the response size; Cloudflare free tunnels
-drop the connection on multi-megabyte bodies.
-
-If the request sets `debug=true`, each food record includes a
-`_debug` sub-dict from estimate_volume_cm3: plane normal, plane
-offset, support inliers, per-stage ray distances, and the height
-distribution. This runs on the full-resolution depth map and
-mask on the server, so the numbers reflect the pipeline's actual
-geometry.
+VLM-provided dimensions are not metric calibration evidence. The API returns
+volume_cm3=null until an independently validated metric-scale source exists.
+A separately named experimental_volume_cm3 may be returned for research
+diagnostics with volume_status="unvalidated"; it must not be used for nutrition
+or customer-facing physical measurements.
 """
 
 from __future__ import annotations
 
 import base64
 import io
+import json
+import math
 import os
+import secrets
 import shutil
 import tempfile
 import uuid
-import json
-import logging
+from pathlib import Path
 
 import cv2
 import numpy as np
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
-from fastapi.concurrency import run_in_threadpool
+from starlette.concurrency import run_in_threadpool
 
 from vision_service.inference.inference import detect_and_measure
 from vision_service.inference.models import (
@@ -57,60 +46,171 @@ from vision_service.inference.models import (
     get_sam2_predictor,
     models_loaded,
 )
-from vision_service.inference.volume import estimate_volume_cm3
+from vision_service.settings import settings
 
 
-VISION_API_TOKEN = os.environ.get("VISION_API_TOKEN")
-if not VISION_API_TOKEN:
-    raise ValueError("VISION_API_TOKEN environment variable must be set.")
+APP_ENV = settings.app_env
+VISION_API_TOKEN = settings.api_token
 
-# Maximum side length for arrays returned when include_arrays=true.
-MAX_ARRAY_SIDE = 512
-logger = logging.getLogger(__name__)
 
-_environment = os.environ.get("APP_ENV", "development").strip().lower()
+def _validate_auth_configuration(
+    app_environment: str,
+    api_token: str | None,
+) -> None:
+    """Require service-to-service authentication in production deployments."""
+    if app_environment == "production" and not api_token:
+        raise RuntimeError(
+            "VISION_API_TOKEN must be configured when APP_ENV=production."
+        )
+
+
+_validate_auth_configuration(APP_ENV, VISION_API_TOKEN)
+
+MAX_ARRAY_SIDE = settings.max_array_side
+
+
+def _load_label_aliases() -> dict[str, str]:
+    configured_path = os.environ.get("VISION_LABEL_ALIASES_FILE")
+    alias_path = (
+        Path(configured_path).expanduser()
+        if configured_path
+        else Path(__file__).resolve().parents[1]
+        / "recognition"
+        / "label_aliases.json"
+    )
+    try:
+        with alias_path.open("r", encoding="utf-8") as alias_file:
+            raw_aliases = json.load(alias_file)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError("Unable to load vision label alias configuration.") from exc
+
+    if not isinstance(raw_aliases, dict):
+        raise ValueError("Vision label aliases must be a JSON object.")
+
+    aliases: dict[str, str] = {}
+    for key, value in raw_aliases.items():
+        if (
+            not isinstance(key, str)
+            or not key.strip()
+            or not isinstance(value, str)
+            or not value.strip()
+        ):
+            raise ValueError("Vision label aliases must map non-empty strings.")
+        aliases[key.strip().lower()] = value.strip().lower()
+    return aliases
+
+
+LABEL_ALIASES = _load_label_aliases()
+
 app = FastAPI(
     title="ActualPlate Vision API",
     version="1.0.0",
-    docs_url=None if _environment == "production" else "/docs",
-    redoc_url=None if _environment == "production" else "/redoc",
-    openapi_url=None if _environment == "production" else "/openapi.json",
 )
 
 
 def _check_auth(x_api_token: str | None) -> None:
+    """Compare service tokens without leaking timing information."""
     if VISION_API_TOKEN is None:
         return
-    if x_api_token != VISION_API_TOKEN:
+    if not secrets.compare_digest(x_api_token or "", VISION_API_TOKEN):
         raise HTTPException(status_code=401, detail="Invalid API token.")
 
 
 def _encode_npz(array: np.ndarray) -> str:
-    buf = io.BytesIO()
-    np.savez_compressed(buf, arr=array)
-    return base64.b64encode(buf.getvalue()).decode("ascii")
+    buffer = io.BytesIO()
+    np.savez_compressed(buffer, arr=array)
+    return base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
 def _downsample_u8(arr: np.ndarray, max_side: int = MAX_ARRAY_SIDE) -> np.ndarray:
-    h, w = arr.shape[:2]
-    longest = max(h, w)
+    height, width = arr.shape[:2]
+    longest = max(height, width)
     if longest <= max_side:
         return arr
     scale = max_side / float(longest)
-    new_w = max(1, int(round(w * scale)))
-    new_h = max(1, int(round(h * scale)))
-    return cv2.resize(arr, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
+    new_width = max(1, int(round(width * scale)))
+    new_height = max(1, int(round(height * scale)))
+    return cv2.resize(
+        arr,
+        (new_width, new_height),
+        interpolation=cv2.INTER_NEAREST,
+    )
 
 
 def _downsample_f32(arr: np.ndarray, max_side: int = MAX_ARRAY_SIDE) -> np.ndarray:
-    h, w = arr.shape[:2]
-    longest = max(h, w)
+    height, width = arr.shape[:2]
+    longest = max(height, width)
     if longest <= max_side:
         return arr
     scale = max_side / float(longest)
-    new_w = max(1, int(round(w * scale)))
-    new_h = max(1, int(round(h * scale)))
-    return cv2.resize(arr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    new_width = max(1, int(round(width * scale)))
+    new_height = max(1, int(round(height * scale)))
+    return cv2.resize(
+        arr,
+        (new_width, new_height),
+        interpolation=cv2.INTER_AREA,
+    )
+
+
+def _parse_scale_map(raw_scale_map: str | None) -> dict[str, dict[str, float | None]]:
+    """Parse and validate per-label dimension estimates from the backend."""
+    if not raw_scale_map:
+        return {}
+
+    def reject_nonstandard_constant(value: str):
+        raise ValueError(f"Invalid numeric constant: {value}")
+
+    try:
+        parsed = json.loads(
+            raw_scale_map,
+            parse_constant=reject_nonstandard_constant,
+        )
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid scale_map JSON format.",
+        ) from exc
+
+    if not isinstance(parsed, dict):
+        raise HTTPException(
+            status_code=400,
+            detail="scale_map must be a JSON object keyed by food label.",
+        )
+
+    normalized: dict[str, dict[str, float | None]] = {}
+    for label, dimensions in parsed.items():
+        if not isinstance(label, str) or not label.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="scale_map labels must be non-empty strings.",
+            )
+        if not isinstance(dimensions, dict):
+            raise HTTPException(
+                status_code=400,
+                detail="Each scale_map value must be an object.",
+            )
+
+        validated_dimensions: dict[str, float | None] = {}
+        for field_name in ("thickness", "diameter"):
+            value = dimensions.get(field_name)
+            if value is None:
+                validated_dimensions[field_name] = None
+                continue
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(float(value))
+                or value <= 0
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"scale_map {field_name} values must be positive finite numbers or null.",
+                )
+            validated_dimensions[field_name] = float(value)
+
+        normalized[label.strip().lower()] = validated_dimensions
+
+    return normalized
 
 
 @app.get("/health")
@@ -120,7 +220,6 @@ async def health() -> dict:
         "service": "ActualPlate Vision API",
         "models_loaded": models_loaded(),
     }
-
 
 
 def _load_all_models() -> None:
@@ -136,8 +235,10 @@ async def warmup(x_api_token: str | None = Header(default=None)) -> dict:
     try:
         await run_in_threadpool(_load_all_models)
     except Exception as exc:
-        logger.exception("Vision model warmup failed")
-        raise HTTPException(status_code=503, detail="Vision model warmup failed.") from exc
+        raise HTTPException(
+            status_code=503,
+            detail="Vision model warmup failed.",
+        ) from exc
     if not models_loaded():
         raise HTTPException(status_code=503, detail="Vision models are not ready.")
     return {
@@ -154,171 +255,175 @@ async def detect(
     include_arrays: bool = Form(False),
     debug: bool = Form(False),
     focal_px: float | None = Form(None),
-    scale_map: str | None = Form(None), # <--- Replaced individual floats with map
+    scale_map: str | None = Form(None),
     x_api_token: str | None = Header(default=None),
 ) -> JSONResponse:
-
     _check_auth(x_api_token)
 
     request_id = str(uuid.uuid4())
-
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(
             status_code=400,
             detail=f"Invalid content type: {file.content_type}",
         )
 
-    food_labels = [l.strip() for l in labels.split(",") if l.strip()]
+    food_labels = [label.strip() for label in labels.split(",") if label.strip()]
     if not food_labels:
         raise HTTPException(status_code=400, detail="No labels provided.")
 
-    # Parse the scale map JSON string
-    parsed_scale_map = {}
-    if scale_map:
-        try:
-            parsed_scale_map = json.loads(scale_map)
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid scale_map JSON format.")
-
+    parsed_scale_map = _parse_scale_map(scale_map)
     image_path: str | None = None
 
     try:
-        with tempfile.NamedTemporaryFile(
-            delete=False,
-            suffix=".jpg",
-        ) as tmp:
-            shutil.copyfileobj(file.file, tmp)
-            image_path = tmp.name
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temporary:
+            shutil.copyfileobj(file.file, temporary)
+            image_path = temporary.name
 
-        result = detect_and_measure(
+        result = await run_in_threadpool(
+            detect_and_measure,
             image_path=image_path,
             labels=food_labels,
             focal_px_override=focal_px,
         )
 
         foods = []
-
         for food, mask in zip(result.foods, result.masks):
-            
-            # Look up the correct scale for THIS specific food
-            food_label_lower = food.label.strip().lower()
-            food_scale = {}
-            
-            # 1. Try exact match
-            if food_label_lower in parsed_scale_map:
-                food_scale = parsed_scale_map[food_label_lower]
-            else:
-                # 2. Controlled Alias Match (Handles known DINO truncations safely)
-                aliases = {
-                    "corn": "corn on the cob",
-                    "nuggets": "chicken nugget",
-                    "fries": "french fries"
-                }
-                alias_target = aliases.get(food_label_lower, food_label_lower)
-                
-                if alias_target in parsed_scale_map:
-                    food_scale = parsed_scale_map[alias_target]
-                else:
-                    # 3. Strict unambiguous substring match
-                    # ONLY use it if there is exactly ONE match to prevent wrong scale assignment
-                    possible_matches = [k for k in parsed_scale_map.keys() if food_label_lower in k or k in food_label_lower]
-                    if len(possible_matches) == 1:
-                        food_scale = parsed_scale_map[possible_matches[0]]
-                        
-            estimated_thickness_cm = food_scale.get("thickness")
-            estimated_diameter_cm = food_scale.get("diameter")
+            food_label_lower = str(food.label).strip().lower()
+            food_scale = parsed_scale_map.get(food_label_lower, {})
+
+            if not food_scale:
+                alias_target = LABEL_ALIASES.get(
+                    food_label_lower,
+                    food_label_lower,
+                )
+                food_scale = parsed_scale_map.get(alias_target, {})
+
+            if not food_scale:
+                possible_matches = [
+                    key
+                    for key in parsed_scale_map
+                    if food_label_lower in key or key in food_label_lower
+                ]
+                if len(possible_matches) == 1:
+                    food_scale = parsed_scale_map[possible_matches[0]]
+
+            estimated_thickness = food_scale.get("thickness")
+            estimated_diameter = food_scale.get("diameter")
+            has_candidate_dimensions = (
+                estimated_thickness is not None
+                and estimated_diameter is not None
+            )
 
             food_record = {
                 "label": food.label,
                 "score": food.score,
                 "mask_pixels": food.mask_pixels,
-                "depth_m": food.depth_m,
+                "depth_stats": food.depth_stats,
                 "bbox": getattr(food, "bbox", None),
+                # Keep the PNG mask stable for the backend's visualization path.
                 "mask_b64": getattr(food, "mask_b64", None),
+                "volume_cm3": None,
+                "experimental_volume_cm3": None,
+                "volume_status": "unavailable",
+                "volume_reason": (
+                    "Metric scale evidence is required before reporting physical volume."
+                ),
             }
 
-            # --- NEW 3D NORMALIZATION MATH ---
-            if estimated_thickness_cm is not None and estimated_diameter_cm is not None:
-                food_depth = result.depth_map[mask]
-                
-                if len(food_depth) > 0:
-                    min_d = float(np.min(food_depth))
-                    max_d = float(np.max(food_depth))
-                    
-                    if max_d > min_d:
-                        # 1. Normalize to 0-1 (Compresses the shape)
-                        normalized = (max_d - result.depth_map) / (max_d - min_d)
+            if has_candidate_dimensions:
+                food_record["volume_status"] = "unvalidated"
+                food_record["volume_reason"] = (
+                    "Volume uses VLM-estimated dimensions without "
+                    "independent metric calibration."
+                )
+
+                finite_food_mask = mask & np.isfinite(result.depth_map)
+                food_depth = result.depth_map[finite_food_mask]
+                bbox = getattr(food, "bbox", None)
+                if (
+                    food_depth.size > 0
+                    and bbox is not None
+                    and len(bbox) == 4
+                    and float(bbox[2]) > float(bbox[0])
+                ):
+                    scale_cm_per_pixel = (
+                        float(estimated_diameter)
+                        / float(bbox[2] - bbox[0])
+                    )
+                    food_record["experimental_scale_factor_cm_per_px"] = (
+                        scale_cm_per_pixel
+                    )
+
+                    min_depth = float(np.min(food_depth))
+                    max_depth = float(np.max(food_depth))
+                    if max_depth > min_depth:
+                        finite_depth_map = np.nan_to_num(
+                            result.depth_map,
+                            nan=max_depth,
+                            posinf=max_depth,
+                            neginf=min_depth,
+                        )
+                        normalized = (max_depth - finite_depth_map) / (
+                            max_depth - min_depth
+                        )
                         normalized = np.clip(normalized, 0, 1)
-                    else:
-                        normalized = np.zeros_like(result.depth_map)
-                        
-                    # 2. Multiply by Gemma's real-world thickness
-                    real_height = normalized * float(estimated_thickness_cm)
-                    
-                    # 3. Calculate real-world pixel area
-                    bbox = getattr(food, "bbox", [0,0,0,0])
-                    bbox_w_px = max(1.0, bbox[2] - bbox[0])
-                    cm_per_px = float(estimated_diameter_cm) / bbox_w_px
-                    pixel_area_cm2 = cm_per_px ** 2
-                    
-                    # 4. Integrate Volume (Sum of Height * Area for each pixel)
-                    vol = float(np.sum(real_height[mask]) * pixel_area_cm2)
-                    
-                    food_record["volume_cm3"] = vol
-                    food_record["volume_status"] = "valid"
-                    food_record["scale_factor_applied"] = cm_per_px
-                else:
-                    food_record["volume_cm3"] = 0.0
-                    food_record["volume_status"] = "unreliable"
-            else:
-                # FAIL SAFELY: Do not use the unvalidated MoGe-2 absolute scale fallback
-                food_record["volume_cm3"] = None
-                food_record["volume_status"] = "unreliable"
-                food_record["volume_error"] = "No scale available or label mismatch"
+                        estimated_height = normalized * float(estimated_thickness)
+                        food_record["experimental_volume_cm3"] = float(
+                            np.sum(estimated_height[finite_food_mask])
+                            * scale_cm_per_pixel**2
+                        )
 
             if include_arrays:
-                m = np.asarray(mask, dtype=np.uint8)
-                m = _downsample_u8(m, MAX_ARRAY_SIDE)
-                food_record["mask_b64"] = _encode_npz(m)
+                mask_array = _downsample_u8(
+                    np.asarray(mask, dtype=np.uint8),
+                    MAX_ARRAY_SIDE,
+                )
+                food_record["mask_array_b64"] = _encode_npz(mask_array)
 
             foods.append(food_record)
 
-        # Encode REAL depth map to Base64 for the UI
-        depth_m = result.depth_map
-        
-        # 1. Sanitize NaN/Inf
-        depth_m = np.nan_to_num(depth_m, nan=0.0, posinf=0.0, neginf=0.0)
+        depth_values = np.nan_to_num(
+            result.depth_map,
+            nan=0.0,
+            posinf=0.0,
+            neginf=0.0,
+        )
 
-        # 2. Create a combined mask of ALL foods to focus the color scale
-        combined_mask = np.zeros_like(depth_m, dtype=bool)
+        combined_mask = np.zeros_like(depth_values, dtype=bool)
         for mask in result.masks:
-            if mask.shape == depth_m.shape:
+            if mask.shape == depth_values.shape:
                 combined_mask |= mask
 
-        # 3. Clip outliers based ONLY on the food's depth range
-        food_depths = depth_m[combined_mask]
+        food_depths = depth_values[combined_mask]
         if len(food_depths) > 100:
             p1, p99 = np.percentile(food_depths, [1, 99])
         else:
-            valid_depths = depth_m[depth_m > 0]
-            p1, p99 = np.percentile(valid_depths, [1, 99]) if len(valid_depths) > 0 else (0, 1)
-            
-        depth_m = np.clip(depth_m, p1, p99)
-            
-        depth_norm = cv2.normalize(depth_m, None, 0, 255, cv2.NORM_MINMAX)
-        depth_uint8 = depth_norm.astype(np.uint8)
-        
-        # 4. Bilateral Filter: smooths flat areas (background) but preserves edges (food)
+            valid_depths = depth_values[depth_values > 0]
+            p1, p99 = (
+                np.percentile(valid_depths, [1, 99])
+                if len(valid_depths) > 0
+                else (0, 1)
+            )
+
+        display_depth = np.clip(depth_values, p1, p99)
+        depth_normalized = cv2.normalize(
+            display_depth,
+            None,
+            0,
+            255,
+            cv2.NORM_MINMAX,
+        )
+        depth_uint8 = depth_normalized.astype(np.uint8)
         depth_uint8 = cv2.bilateralFilter(depth_uint8, 9, 75, 75)
-        
-        # 5. Apply colormap
         depth_color = cv2.applyColorMap(depth_uint8, cv2.COLORMAP_INFERNO)
-        
-        # 6. Dim the background (outside the mask) so the food pops and the halo noise is hidden
-        depth_color[~combined_mask] = (depth_color[~combined_mask] * 0.3).astype(np.uint8)
-        
-        _, depth_buffer = cv2.imencode('.png', depth_color)
-        depth_b64 = base64.b64encode(depth_buffer).decode('utf-8')
+        depth_color[~combined_mask] = (
+            depth_color[~combined_mask] * 0.3
+        ).astype(np.uint8)
+
+        success, depth_buffer = cv2.imencode(".png", depth_color)
+        if not success:
+            raise RuntimeError("Unable to encode depth visualization.")
+        depth_b64 = base64.b64encode(depth_buffer).decode("ascii")
 
         response = {
             "foods": foods,
@@ -331,12 +436,13 @@ async def detect(
         }
 
         if include_arrays:
-            dm = np.asarray(result.depth_map, dtype=np.float32)
-            dm = _downsample_f32(dm, MAX_ARRAY_SIDE)
-            response["depth_map_b64"] = _encode_npz(dm)
+            depth_array = _downsample_f32(
+                np.asarray(result.depth_map, dtype=np.float32),
+                MAX_ARRAY_SIDE,
+            )
+            response["depth_map_b64"] = _encode_npz(depth_array)
 
         return JSONResponse(content=response)
-
     finally:
         if image_path and os.path.exists(image_path):
             os.remove(image_path)
