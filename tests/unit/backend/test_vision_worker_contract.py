@@ -20,3 +20,9 @@ def test_vision_worker_warmup_sources_are_syntactically_valid_and_registered():
     assert "get_sam2_predictor()" in api_source
     assert "get_moge()" in api_source
     assert "_MODEL_LOAD_LOCK" in models_source
+    assert "await run_in_threadpool" in api_source
+    assert '"volume_cm3": None' in api_source
+    assert '"experimental_volume_cm3": None' in api_source
+    assert '"volume_status": "unavailable"' in api_source
+    assert "from vision_service.settings import settings" in models_source
+    assert "MoGe-2 supplies monocular geometry/depth" in models_source
